@@ -1,23 +1,48 @@
-# Beadu × Froyo — Bracelet Builder
+# Beadu (www.beadu.in) — Complete E-Commerce Store & Custom Bracelet Builder
 
-Indian handmade jewellery customizer built with **Next.js 16**, **Zustand**, **Supabase**, and deployed on **Netlify**.
-
----
-
-## Tech Stack
-
-| Layer | Tech |
-|---|---|
-| Framework | Next.js 16 (App Router) |
-| State | Zustand |
-| Database | Supabase (PostgreSQL) |
-| Hosting | Netlify |
-| Styling | Tailwind CSS v4 |
-| Drag & Drop | @dnd-kit |
+A high-performance, mobile-first E-Commerce web application custom-built for **www.beadu.in** (Indian handmade artisan jewelry, wooden beads, terracotta clay, glass charms, keychains, necklaces, and interactive custom bracelet builder).
 
 ---
 
-## Quick Start
+## 🎨 Visual Identity & Typography
+
+- **Heading Display Font**: `Fredoka` (playful, rounded handwritten typography matching *"Handmade with Love, Crafted with Care"*, *"Quick Links"*, *"About Us"*, *"Say Hello to Beadu"*).
+- **Body Font**: `Quicksand` (clean, rounded geometric typography for copy, forms, and navigation).
+- **Brand Palette**: Antique Gold (`#9e7b16`, `#d4af37`), Gold Shimmer (`.gold-shimmer`), Warm Porcelain Cream (`#faf6f2`), Terracotta Coral, and Glassmorphism cards (`.glass-card`).
+
+---
+
+## 🛍️ Key Features
+
+1. **Jewelry Storefront & Catalog (`/shop`)**:
+   - Categories: Bracelets, Earrings, Keychains, Necklaces, Charms & Trinkets, Custom Builder.
+   - Material Filters: Wooden Beads, Terracotta Clay, Glass Beads, Gemstones & Cat Eye, Hand-Painted Pastels.
+   - Filters: Price range slider, live query search, sorting (Featured, Price Low-High / High-Low, Rating).
+   - Desktop Sidebar Filter + Mobile Action Sheet Drawer + Floating Back-to-Top Button.
+2. **Product Details & Logistics (`/shop/[id]`)**:
+   - Multi-angle thumbnail image gallery carousel.
+   - Ratings histogram breakdown bar chart (5★ down to 1★).
+   - **Delhivery Express Live PIN Code Serviceability Check** (`lib/delhivery.ts`).
+3. **Cart & Gift Personalization (`/cart`)**:
+   - Quantity steppers & item removal triggers.
+   - **Gift Wrapping Option**: Toggle per-item gift wrap (+`₹20`/item).
+   - **Gift Message Field**: Custom card message input with character limit bounds (max 120 chars) and real-time character countdown.
+   - **Cost Summary**: Items Subtotal, Gift Wrapping Fee (`₹20` x count), Platform Fee (`₹25`), Free Shipping, Grand Total.
+4. **Checkout Matrix & Payment Gateway (`/checkout`)**:
+   - **Saved Address Radio Selection**: Radio grid with active highlight.
+   - **"+ Add New Address"**: Inline address creation with PIN validation via Delhivery.
+   - **SME Pay Payment Gateway Integration** (`lib/smePay.ts`): SME Pay Instant UPI / QR, Cards, Net Banking, and Cash on Delivery (COD).
+5. **Profile Terminal & Tracking (`/profile`)**:
+   - **Adaptive Layout**: Mobile Icon Grid Menu vs Desktop Sticky Sidebar.
+   - **My Orders**: Order history with status pills (*Order Placed*, *Order Accepted*, *Shipped*, *Delivered*).
+   - **Delhivery Live AWB Tracking Modal**: Real-time shipment timeline steps.
+   - **Saved Addresses CRUD**: Manage addresses, add new, set default, remove.
+6. **Custom Bracelet Builder (`/builder`)**:
+   - Real-time 2D canvas wrist strand visualizer, bead placement, spacer configuration, and direct add-to-cart.
+
+---
+
+## 🛠️ Quick Start
 
 ```bash
 cd bracelet-builder
@@ -26,140 +51,57 @@ npm run dev
 # → http://localhost:3000
 ```
 
----
-
-## Environment Setup
-
-Create `bracelet-builder/.env.local`:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhb...
-SUPABASE_SERVICE_ROLE_KEY=eyJhb...
-NEXT_PUBLIC_SITE_URL=https://your-site.netlify.app
-```
-
-> ⚠️ **Never commit `.env.local` to Git.** Already in `.gitignore`.
-
----
-
-## Database Setup
-
-Run in **Supabase → SQL Editor**:
-
-```sql
--- Beads catalog
-create table if not exists beads (
-  id            text primary key,
-  name          text not null,
-  category      text not null,
-  price         integer not null default 0,
-  material      text,
-  image_url     text,
-  is_premium    boolean not null default false,
-  rotation_allowed boolean not null default false,
-  size          float not null default 1,
-  size_mm       float not null default 8,
-  width_mm      float not null default 8,
-  active        boolean not null default true,
-  created_at    timestamptz default now()
-);
-
--- Orders
-create table if not exists bracelets (
-  id              uuid primary key default gen_random_uuid(),
-  customer_name   text,
-  email           text,
-  phone           text,
-  wrist_inches    float not null default 7.0,
-  cord_type       text not null default 'elastic',
-  placed_beads    jsonb not null default '[]',
-  total_price     integer not null default 0,
-  status          text not null default 'draft',
-  preview_image_url text,
-  address         text,
-  notes           text,
-  created_at      timestamptz default now(),
-  updated_at      timestamptz default now()
-);
-
--- Auto-update timestamp
-create or replace function update_updated_at()
-returns trigger language plpgsql as $$
-begin new.updated_at = now(); return new; end; $$;
-
-create trigger bracelets_updated_at
-  before update on bracelets
-  for each row execute procedure update_updated_at();
-
--- Row Level Security
-alter table beads enable row level security;
-alter table bracelets enable row level security;
-
-create policy "beads_public_read" on beads for select using (true);
-create policy "beads_admin_write" on beads for all using (auth.role() = 'service_role');
-create policy "bracelets_insert" on bracelets for insert with check (true);
-create policy "bracelets_admin_all" on bracelets for all using (auth.role() = 'service_role');
-```
-
-### Seed Bead Catalog
-
+To verify production build:
 ```bash
 cd bracelet-builder
-npx ts-node --project tsconfig.json scripts/seed-beads.ts
+npm run build
 ```
 
 ---
 
-## Netlify Deployment
-
-1. Push to GitHub
-2. [app.netlify.com](https://app.netlify.com) → **Add new site → Import from Git**
-3. Configure:
-
-| Setting | Value |
-|---|---|
-| Base directory | `bracelet-builder` |
-| Build command | `npm run build` |
-| Publish directory | `bracelet-builder/.next` |
-
-4. Add environment variables in **Site Settings → Environment Variables**
-
----
-
-## Project Structure
+## 📁 Project Directory Structure
 
 ```
 bracelet-builder/
 ├── app/
-│   ├── page.tsx                 # Landing page
-│   ├── builder/page.tsx         # Bracelet customizer
-│   ├── admin/orders/page.tsx    # Admin order dashboard
-│   ├── actions/submitOrder.ts   # Server Action — order submission
-│   └── globals.css              # Design system & theme
-├── components/builder/
-│   ├── BraceletCanvas.tsx       # SVG strand renderer
-│   ├── BeadLibrary.tsx          # Bead catalog grid
-│   ├── CraftingTray.tsx         # Selected beads tray
-│   ├── SummaryPanel.tsx         # Order summary
-│   └── Checkout.tsx             # Checkout flow
+│   ├── page.tsx                 # Beadu E-Commerce Home Page
+│   ├── shop/                    # Jewelry Catalog & Filter Drawer
+│   ├── shop/[id]/               # Detail View & Delhivery PIN Check
+│   ├── cart/                    # Cart & Gift Wrapping (+₹20)
+│   ├── checkout/                # Checkout & SME Pay Gateway
+│   ├── profile/                 # Profile, Orders & Live AWB Tracking
+│   ├── wishlist/                # Saved Wishlist Grid
+│   ├── builder/page.tsx         # Interactive Bracelet Customizer
+│   ├── admin/orders/page.tsx    # Admin Order Dashboard
+│   └── globals.css              # Design tokens, Fredoka & Quicksand fonts
+├── components/ecom/
+│   ├── Header.tsx               # Sticky header with instant search & counters
+│   ├── HeroSection.tsx          # Wavy frame hero with see what's new button
+│   ├── CategoryMarquee.tsx      # Infinite marquee carrying jewelry categories
+│   ├── FeaturedSection.tsx      # Best sellers product slider with arrow controls
+│   ├── MaterialShowcase.tsx     # Sustainable wood, clay, gemstone showcase
+│   ├── CustomerReviews.tsx      # Verified buyer review cards
+│   ├── ContactForm.tsx          # Support & inquiry form
+│   ├── Footer.tsx               # Exact beadu.in footer layout & copyright
+│   ├── BottomNavigation.tsx     # Mobile bottom bar with touch active scales
+│   ├── MobileSidebar.tsx        # Mobile drawer navigation
+│   └── Toast.tsx                # Notification toast system
 ├── lib/
-│   ├── catalog.ts               # Static bead catalog
-│   ├── types.ts                 # Shared TypeScript types
-│   ├── pricing.ts               # Pricing & sizing logic
-│   └── supabase.ts              # Supabase client (lazy singleton)
+│   ├── ecomData.ts              # Product catalog & review data models
+│   ├── smePay.ts                # SME Pay payment gateway helper
+│   └── delhivery.ts            # Delhivery One logistics & AWB tracking helper
 ├── store/
-│   └── braceletStore.ts         # Zustand state management
-├── public/
-│   ├── beadu-logo.png           # Brand logo
-│   └── beads/                   # Bead images
-├── scripts/
-│   └── seed-beads.ts            # One-time DB seeder
+│   ├── ecomStore.ts             # Global Zustand store for cart, wishlist, orders
+│   └── braceletStore.ts         # Customizer Zustand store
 └── netlify.toml                 # Netlify deployment config
 ```
 
 ---
 
-## Order Lifecycle
+## 🛡️ Architectural Safeguards
 
-`draft` → `confirmed` → `shipped` → `delivered`
+- **Mobile Touch Safeguard**: `active:scale-95` on mobile touch targets; hover states scoped to `md:hover:`.
+- **Infinite Marquee Safeguard**: 3x array tripling, 1/3 scroll position reset, auto-pause handlers.
+- **Financial Calculation Safeguard**: Subtotals, gift surcharges, platform fees, and totals are computed reactively in render scope from the singular Zustand `cart` array.
+- **Z-Index Hierarchy**: `z-30` Back-To-Top → `z-40` BottomNav (`pb-safe`) → `z-50` Header/Filter Sheet → `z-[100]` Toast & Sidebar.
+- **Graceful Degradation**: Local catalog data fallback prevents blank screens on network dropouts.
