@@ -1,0 +1,28 @@
+name,category,price,material,isPremium,rotationAllowed,widthMm,filename,original_filename
+Artisan Jade Green Sphere,crystal,0,Natural Green Jade,false,false,8,bead_001.png,0.jpg
+Frosted Ice Blue Cylinder,crystal,0,Hand-Blown Glass,false,false,10,bead_002.png,1.jpg
+Terrazzo Mosaic Globe,crystal,0,Artisan Terrazzo Glass,false,false,8,bead_003.png,10.jpg
+Gilded Terracotta Sun Disc,gold,250,Hand-Molded Terracotta & Gold Leaf,true,true,10,bead_004.png,11.jpg
+Rose Quartz Heart Charm,charm,350,Natural Rose Quartz,true,true,12,bead_005.png,12.jpg
+Polished Indian Rosewood,wood,0,Sustainably Sourced Rosewood,false,false,8,bead_006.png,13.jpg
+Baroque Freshwater Pearl,pearl,0,Natural Freshwater Pearl,false,false,10,bead_007.png,14.jpg
+Matte Obsidian Black Sphere,crystal,0,Natural Black Obsidian,false,false,8,bead_008.png,15.jpg
+Hand-Engraved Brass Emblem,letter,0,Recycled Brass,false,false,8,bead_009.png,16.jpg
+Ocean Blue Swirl Glass,crystal,0,Artisanal Blown Glass,false,false,8,bead_010.png,17.jpg
+Artisan Kundan Solstice Sun,charm,450,Solid Brass & Kundan Glass,true,true,12,bead_011.png,18.jpg
+Raw Amethyst Gemstone,crystal,300,Natural Indian Amethyst,true,true,9,bead_012.png,19.jpg
+Golden Brass Spacer Bead,gold,0,Polished Brass,false,false,6,bead_013.png,2.jpg
+Midnight Lapis Lazuli,crystal,400,Natural Lapis Lazuli,true,false,8,bead_014.png,20.jpg
+Emerald Cut Gemstone,birthstone,550,Natural Emerald Gem,true,true,10,bead_015.png,21.jpg
+Amber Honey Crystal,crystal,0,Fired Baltic Amber,false,false,8,bead_016.png,22.jpg
+Carved Wooden Mandala Disc,zodiac,0,Hand-Carved Walnut Wood,false,true,10,bead_017.png,23.jpg
+Copper Engraved Bar,charm,350,Recycled Copper,true,true,12,bead_018.png,24.jpg
+Turquoise Pebble Charm,crystal,0,Natural Turquoise,false,true,9,bead_019.png,25.jpg
+Ruby Oval Pendant,birthstone,650,Gold-Plated Natural Ruby,true,true,12,bead_020.png,26.jpg
+Silver Hammered Sphere,silver,0,925 Sterling Silver,false,false,8,bead_021.png,3.jpg
+Faceted Sapphire Gem,birthstone,600,Natural Sapphire Stone,true,true,10,bead_022.png,4.jpg
+Artisan Ceramic Speckle,ceramic,0,Glazed Stoneware Clay,false,false,8,bead_023.png,5.jpg
+Zodiac Celestial Sun,zodiac,0,Hand-Carved Brass Disc,false,true,9,bead_024.png,6.jpg
+Golden Heart Spacer,charm,200,18K Gold Plated Brass,true,true,10,bead_025.png,7.jpg
+Smoky Quartz Crystal,crystal,0,Natural Smoky Quartz,false,false,8,bead_026.png,8.jpg
+White Opal Sphere,pearl,300,Ethically Mined Opal,true,false,8,bead_027.png,9.jpg
