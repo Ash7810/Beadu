@@ -123,13 +123,12 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    // Require admin authorization
-    const authHeader = req.headers.get("authorization") || req.headers.get("x-admin-key");
-    const validSecret = process.env.ADMIN_SECRET_KEY || "beadu-admin-key-2026";
-    if (!authHeader || (authHeader !== `Bearer ${validSecret}` && authHeader !== validSecret)) {
+    const { getAuthenticatedAdmin } = await import("@/lib/authServer");
+    const { isAdmin } = await getAuthenticatedAdmin();
+    if (!isAdmin) {
       return NextResponse.json(
         { success: false, message: "Unauthorized. Admin authorization required to delete reviews." },
-        { status: 401 }
+        { status: 403 }
       );
     }
 

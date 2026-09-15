@@ -14,12 +14,13 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminOrdersPage() {
-  const { orders, updateOrderStatus, updateOrderAWB, syncDelhiveryAutoStatuses } = useEcomStore();
+  const { orders, updateOrderStatus, updateOrderAWB, syncDelhiveryAutoStatuses, addToast } = useEcomStore();
   const [serverOrders, setServerOrders] = useState<Order[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [manifestingId, setManifestingId] = useState<string | null>(null);
 
   useEffect(() => {
     syncDelhiveryAutoStatuses();
@@ -30,7 +31,7 @@ export default function AdminOrdersPage() {
           setServerOrders(data.orders);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [syncDelhiveryAutoStatuses]);
 
   const allOrders = useMemo(() => {
@@ -46,24 +47,156 @@ export default function AdminOrdersPage() {
   }, [serverOrders, orders]);
 
   const filteredOrders = useMemo(() => {
+    const cleanSearch = searchQuery.trim().toLowerCase().replace(/^#/, "");
     return allOrders.filter((o) => {
       const matchesStatus = selectedStatus === "All" || o.status === selectedStatus;
+      const cleanOrderId = o.id.toLowerCase().replace(/^#|^ord-/, "");
       const matchesSearch =
-        !searchQuery.trim() ||
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.shippingAddress.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (o.awbNumber && o.awbNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+        !cleanSearch ||
+        o.id.toLowerCase().includes(cleanSearch) ||
+        cleanOrderId.includes(cleanSearch) ||
+        o.shippingAddress.fullName.toLowerCase().includes(cleanSearch) ||
+        (o.awbNumber && o.awbNumber.toLowerCase().includes(cleanSearch));
       return matchesStatus && matchesSearch;
     });
   }, [allOrders, selectedStatus, searchQuery]);
 
-  const handleUpdateStatus = (orderId: string, newStatus: Order["status"]) => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStatus, searchQuery, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, currentPage, pageSize]);
+
+  const handleUpdateStatus = async (orderId: string, newStatus: Order["status"]) => {
+    // 1. Optimistic state updates
     updateOrderStatus(orderId, newStatus);
+    setServerOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
+
+    // 2. Persist to server & database via PATCH
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast("Status Updated", `Order ${orderId} updated to "${newStatus}".`, "success");
+      } else {
+        addToast("Status Warning", data.error || "Failed to persist to database", "warning");
+      }
+    } catch {
+      addToast("Network Notice", "Status updated locally; server offline fallback active.", "info");
+    }
   };
 
-  const handleGenerateAWB = (orderId: string) => {
-    const newAwb = `DLHV${Math.floor(100000000 + Math.random() * 900000000)}`;
-    updateOrderAWB(orderId, newAwb);
+  const handleGenerateAWB = async (order: Order) => {
+    setManifestingId(order.id);
+    try {
+      const res = await fetch("/api/delhivery/create-shipment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+      const data = await res.json();
+      if (data.success && data.waybill && !data.simulated) {
+        updateOrderAWB(order.id, data.waybill);
+        updateOrderStatus(order.id, "Order Accepted");
+        setServerOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, awbNumber: data.waybill, delhiveryStatus: "Manifested", status: "Order Accepted", delhiveryError: undefined }
+              : o
+          )
+        );
+        addToast("Delhivery AWB Assigned", `Waybill: ${data.waybill} — Order Accepted for Dispatch`, "success");
+      } else {
+        const errorMsg = data.error || "Failed to manifest shipment with Delhivery.";
+        addToast("Delhivery Notice", errorMsg, "warning");
+        setServerOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, delhiveryStatus: "Failed", status: o.status === "Cancelled" ? "Cancelled" : "Order Placed", delhiveryError: errorMsg }
+              : o
+          )
+        );
+      }
+    } catch (err: any) {
+      addToast("Network Error", err.message || "Failed to reach Delhivery API", "warning");
+    } finally {
+      setManifestingId(null);
+    }
+  };
+
+  const [isBulkManifesting, setIsBulkManifesting] = useState(false);
+
+  const unmanifestedOrders = useMemo(() => {
+    return allOrders.filter(
+      (o) =>
+        o.status !== "Cancelled" &&
+        o.status !== "Delivered" &&
+        (o.delhiveryStatus === "Failed" ||
+          o.delhiveryStatus === "Pending" ||
+          !o.awbNumber ||
+          o.awbNumber.startsWith("DLHV"))
+    );
+  }, [allOrders]);
+
+  const handleBulkManifest = async () => {
+    if (unmanifestedOrders.length === 0) {
+      addToast("Logistics Status", "No pending orders require manifestation.", "info");
+      return;
+    }
+    setIsBulkManifesting(true);
+    try {
+      const res = await fetch("/api/delhivery/bulk-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: unmanifestedOrders }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.manifestedCount > 0) {
+          addToast(
+            "Bulk Manifest Complete",
+            `Successfully assigned live Delhivery AWBs to ${data.manifestedCount} order(s).`,
+            "success"
+          );
+          fetch("/api/orders")
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.success && Array.isArray(d.orders)) {
+                setServerOrders(d.orders);
+              }
+            });
+        }
+        if (data.failedCount > 0) {
+          const sampleErr = data.results.find((r: any) => !r.success)?.error || "Insufficient wallet balance";
+          addToast(
+            "Some Manifestations Pending",
+            `${data.failedCount} order(s) still waiting: ${sampleErr}`,
+            "warning"
+          );
+        }
+      } else {
+        addToast("Bulk Manifest Error", data.error || "Failed to process bulk manifestation", "warning");
+      }
+    } catch (err: any) {
+      addToast("Network Error", err.message || "Failed to connect to manifestation service", "warning");
+    } finally {
+      setIsBulkManifesting(false);
+    }
   };
 
   const statusCounts = useMemo(() => {
@@ -102,17 +235,60 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
+      {/* Courier Balance & Manifestation Alert Banner */}
+      {unmanifestedOrders.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-3">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <p className="font-bold text-amber-900">
+                {unmanifestedOrders.length} Order{unmanifestedOrders.length > 1 ? "s" : ""} Awaiting Courier Manifestation
+              </p>
+              <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
+                Customer checkouts are safely secured. If your Delhivery One prepaid wallet balance was depleted, recharge your wallet and manifest in 1-click.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <a
+              href="https://one.delhivery.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-xl border border-amber-300 bg-white text-amber-900 hover:bg-amber-50 font-bold text-[11px] transition-colors"
+            >
+              Recharge Wallet ↗
+            </a>
+            <button
+              onClick={handleBulkManifest}
+              disabled={isBulkManifesting}
+              className="px-3.5 py-1.5 rounded-xl bg-[#792c14] hover:bg-[#68250f] text-white font-bold text-[11px] shadow-xs active:scale-95 disabled:opacity-50 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              {isBulkManifesting ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Manifesting...</span>
+                </>
+              ) : (
+                <span>Manifest All ({unmanifestedOrders.length})</span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Status Filter Pills */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {["All", "Order Placed", "Order Accepted", "Shipped", "Delivered", "Cancelled"].map((st) => (
           <button
             key={st}
             onClick={() => setSelectedStatus(st)}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${
-              selectedStatus === st
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${selectedStatus === st
                 ? "bg-foreground text-background shadow-xs"
                 : "bg-card border border-border text-muted-foreground hover:bg-muted"
-            }`}
+              }`}
           >
             {st} {statusCounts[st] ? `(${statusCounts[st]})` : "(0)"}
           </button>
@@ -134,14 +310,18 @@ export default function AdminOrdersPage() {
 
         {filteredOrders.length === 0 ? (
           <div className="p-10 text-center space-y-2">
-            <p className="text-2xl">📦</p>
+            <div className="w-10 h-10 rounded-xl bg-muted/60 text-muted-foreground flex items-center justify-center mx-auto">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
             <h3 className="font-heading text-lg text-foreground">No Orders Found</h3>
             <p className="text-xs text-muted-foreground">
               {searchQuery ? `No results for "${searchQuery}"` : `No orders with status: ${selectedStatus}`}
             </p>
           </div>
         ) : (
-          filteredOrders.map((order) => {
+          paginatedOrders.map((order) => {
             const isExpanded = expandedOrder === order.id;
             const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
             const firstItemName = order.items[0]?.product.name || "—";
@@ -159,7 +339,7 @@ export default function AdminOrdersPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                     <div>
-                      <p className="text-xs font-bold text-foreground">{order.id}</p>
+                      <p className="text-xs font-bold text-foreground font-mono">#{String(order.id).replace(/^ORD-|^#/, "")}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {new Date(order.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </p>
@@ -192,7 +372,20 @@ export default function AdminOrdersPage() {
 
                   {/* AWB */}
                   <div className="md:col-span-2 hidden md:block">
-                    <p className="text-[11px] font-mono text-primary font-bold truncate">{order.awbNumber}</p>
+                    {order.awbNumber && !order.awbNumber.startsWith("DLHV") ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <span>✓</span>
+                        <span className="font-mono">{order.awbNumber}</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"
+                        title={order.delhiveryError || "Awaiting live courier assignment"}
+                      >
+                        <span>⏳</span>
+                        <span>Pending Manifest</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -232,7 +425,7 @@ export default function AdminOrdersPage() {
                                 <p className="font-semibold text-foreground truncate text-[11px]">{item.product.name}</p>
                                 <p className="text-[10px] text-muted-foreground">
                                   {item.quantity} × ₹{item.product.price}
-                                  {item.giftWrap && " • 🎁 Gift Wrap"}
+                                  {item.giftWrap && " • Gift Wrap"}
                                 </p>
                               </div>
                               <span className="font-bold text-foreground text-[11px]">₹{item.product.price * item.quantity}</span>
@@ -243,7 +436,7 @@ export default function AdminOrdersPage() {
                         {/* Custom beads blueprint — collapsible */}
                         {order.items.some((item) => item.product.id.startsWith("custom") || item.product.category === "Custom Builder") && (
                           <details className="text-[10px] bg-amber-50 border border-amber-200 rounded-xl p-2">
-                            <summary className="font-bold text-amber-900 cursor-pointer">🔨 Assembly Blueprint</summary>
+                            <summary className="font-bold text-amber-900 cursor-pointer">Assembly Blueprint</summary>
                             <div className="flex flex-wrap gap-1 mt-1.5">
                               {order.items
                                 .filter((item) => item.product.id.startsWith("custom") || item.product.category === "Custom Builder")
@@ -266,7 +459,7 @@ export default function AdminOrdersPage() {
                           <p className="text-[11px] text-muted-foreground">
                             {order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.zipCode}
                           </p>
-                          <p className="text-[11px] font-semibold text-foreground">📞 {order.shippingAddress.phone}</p>
+                          <p className="text-[11px] font-semibold text-foreground">Phone: {order.shippingAddress.phone}</p>
                         </div>
                         <div className="p-2.5 rounded-xl bg-muted/20 border border-border/30 space-y-1 text-[11px]">
                           <p className="text-muted-foreground">Payment: <strong className="text-foreground">{order.paymentMode}</strong></p>
@@ -279,8 +472,40 @@ export default function AdminOrdersPage() {
                         <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Controls</h4>
 
                         {/* Status update */}
-                        <div className="p-2.5 rounded-xl bg-muted/20 border border-border/30 space-y-2">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Update Status</label>
+                        {/* Quick 1-Click Workflow Action */}
+                        {order.status === "Order Placed" && (
+                          <button
+                            onClick={() => handleUpdateStatus(order.id, "Order Accepted")}
+                            className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-xl text-[11px] shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
+                          >
+                            <span>✓</span>
+                            <span>Accept Order (Start Crafting)</span>
+                          </button>
+                        )}
+
+                        {order.status === "Order Accepted" && (
+                          <button
+                            onClick={() => handleGenerateAWB(order)}
+                            disabled={manifestingId === order.id}
+                            className="w-full bg-[#792c14] hover:bg-[#68250f] text-white font-bold py-2 px-3 rounded-xl text-[11px] shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                          >
+                            <span>{manifestingId === order.id ? "Manifesting..." : "Manifest & Dispatch (Delhivery)"}</span>
+                          </button>
+                        )}
+
+                        {order.status === "Shipped" && (
+                          <button
+                            onClick={() => handleUpdateStatus(order.id, "Delivered")}
+                            className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-xl text-[11px] shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
+                          >
+                            <span>✓</span>
+                            <span>Mark as Delivered</span>
+                          </button>
+                        )}
+
+                        {/* Status update selector */}
+                        <div className="p-2.5 rounded-xl bg-muted/20 border border-border/30 space-y-1.5">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Manual Status Override</label>
                           <select
                             value={order.status}
                             onChange={(e) => handleUpdateStatus(order.id, e.target.value as Order["status"])}
@@ -295,17 +520,41 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* AWB */}
-                        <div className="p-2.5 rounded-xl bg-muted/20 border border-border/30 flex justify-between items-center">
-                          <div>
-                            <span className="block text-[10px] uppercase font-bold text-muted-foreground">AWB</span>
-                            <span className="font-mono text-[11px] font-bold text-primary">{order.awbNumber}</span>
+                        <div className="p-2.5 rounded-xl bg-muted/20 border border-border/30 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="block text-[10px] uppercase font-bold text-muted-foreground">Delhivery AWB</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[11px] font-bold text-primary">
+                                  {order.awbNumber && !order.awbNumber.startsWith("DLHV") ? order.awbNumber : "Awaiting AWB"}
+                                </span>
+                                {order.awbNumber && !order.awbNumber.startsWith("DLHV") && (
+                                  <a
+                                    href={`https://www.delhivery.com/track/package/${order.awbNumber}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-emerald-700 hover:underline font-bold"
+                                  >
+                                    Track ↗
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            {(!order.awbNumber || order.awbNumber.startsWith("DLHV")) && (
+                              <button
+                                onClick={() => handleGenerateAWB(order)}
+                                disabled={manifestingId === order.id}
+                                className="bg-[#792c14] hover:bg-[#68250f] text-white font-bold px-2.5 py-1.5 rounded-lg text-[10px] disabled:opacity-50 transition-colors cursor-pointer"
+                              >
+                                {manifestingId === order.id ? "Manifesting..." : "Manifest"}
+                              </button>
+                            )}
                           </div>
-                          <button
-                            onClick={() => handleGenerateAWB(order.id)}
-                            className="bg-primary/10 hover:bg-primary/20 text-primary font-bold px-2.5 py-1 rounded-lg text-[10px]"
-                          >
-                            Re-generate
-                          </button>
+                          {order.delhiveryError && (
+                            <p className="text-[10px] text-amber-900 bg-amber-50 p-2 rounded-lg border border-amber-200 leading-normal">
+                              {order.delhiveryError}
+                            </p>
+                          )}
                         </div>
 
                         {/* Summary */}
@@ -339,6 +588,72 @@ export default function AdminOrdersPage() {
             );
           })
         )}
+
+        {/* Pagination Controls Bar */}
+        {filteredOrders.length > 0 && (
+          <div className="px-4 py-3 bg-muted/20 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
+              <span>
+                Showing <strong className="text-foreground">{(currentPage - 1) * pageSize + 1}</strong> to{" "}
+                <strong className="text-foreground">{Math.min(currentPage * pageSize, filteredOrders.length)}</strong> of{" "}
+                <strong className="text-foreground">{filteredOrders.length}</strong> orders
+              </span>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                <span>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="clay-input py-0.5 px-1.5 text-[11px] font-bold bg-background rounded-md"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-2.5 py-1 rounded-lg border border-border bg-background text-foreground hover:bg-muted font-bold text-[11px] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                ← Prev
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .map((p, idx, arr) => (
+                    <span key={p} className="flex items-center">
+                      {idx > 0 && arr[idx - 1] !== p - 1 && (
+                        <span className="px-1 text-muted-foreground text-[10px]">…</span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-colors ${
+                          currentPage === p
+                            ? "bg-foreground text-background shadow-xs"
+                            : "bg-background border border-border text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </span>
+                  ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-2.5 py-1 rounded-lg border border-border bg-background text-foreground hover:bg-muted font-bold text-[11px] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Printable Invoice Modal */}
@@ -349,7 +664,7 @@ export default function AdminOrdersPage() {
             <div className="flex justify-between items-start border-b border-border pb-4">
               <div>
                 <h2 className="font-heading text-2xl text-foreground">Tax Invoice Summary</h2>
-                <p className="text-xs text-muted-foreground">Order ID: {activeInvoiceOrder.id}</p>
+                <p className="text-xs text-muted-foreground font-mono">Order ID: #{String(activeInvoiceOrder.id).replace(/^ORD-|^#/, "")}</p>
               </div>
               <button
                 onClick={() => setActiveInvoiceOrder(null)}

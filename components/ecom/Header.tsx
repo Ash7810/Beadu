@@ -59,9 +59,9 @@ export function Header() {
             </Link>
             <Link
               href="/builder"
-              className="text-primary hover:text-primary/90 font-bold bg-primary/10 hover:bg-primary/20 px-3 py-1 rounded-full transition-[background-color,transform] duration-150 ease-out active:scale-[0.96] inline-flex items-center gap-1 shadow-xs"
+              className="text-primary hover:text-primary/90 font-bold bg-primary/10 hover:bg-primary/20 px-3.5 py-1 rounded-full transition-[background-color,transform] duration-150 ease-out active:scale-[0.96] inline-flex items-center gap-1 shadow-xs"
             >
-              <span>✨ Customize</span>
+              <span>Customize</span>
             </Link>
             <Link href="/shop" className="hover:text-primary transition-colors duration-150 active:scale-[0.96] inline-block">
               Shop

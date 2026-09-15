@@ -46,7 +46,7 @@ export type PlacedBead = Bead & {
 
 export const DEFAULT_WRIST_SIZE_MM = 203;
 
-export type CordType = "elastic" | "leather" | "gold_chain" | "silver_chain";
+export type CordType = "elastic";
 
 export type BraceletConfig = {
   totalSlots: number;
@@ -64,19 +64,6 @@ export type PricingResult = {
   chargeableBeadCount: number;
   premiumBeadsTotal: number;
   remainingSlots: number;
-};
-
-export type DesignSubmission = {
-  designId?: string;
-  placedBeads: PlacedBead[];
-  customerName: string;
-  email: string;
-  phone: string;
-  wristInches: number;
-  cordType?: CordType;
-  address?: string;
-  totalPrice?: number;
-  previewImageUrl?: string;
 };
 
 export type PresetDesign = {

@@ -155,15 +155,23 @@ export default function AdminBeadsPage() {
         .then((d) => {
           if (Array.isArray(d) && d.length > 0) setBeads(d);
         })
-        .catch(() => {});
-    } catch (_) {}
+        .catch(() => { });
+    } catch (_) { }
   }, []);
 
-  const persistBeads = (updated: Bead[]) => {
+  const persistBeads = (updated: Bead[], beadToSave?: Bead) => {
     setBeads(updated);
     try {
       localStorage.setItem("beadu_admin_beads", JSON.stringify(updated));
-    } catch (_) {}
+    } catch (_) { }
+
+    if (beadToSave) {
+      fetch("/api/beads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(beadToSave),
+      }).catch((err) => console.warn("Failed to sync bead with database:", err));
+    }
   };
 
   const defaultBead: Omit<Bead, "id"> = {
@@ -189,6 +197,7 @@ export default function AdminBeadsPage() {
   );
 
   const openAddBead = () => {
+    setEditingBead(null);
     setBeadForm(defaultBead);
     setBeadPreviewUrl("");
     setBeadModal("add");
@@ -196,7 +205,20 @@ export default function AdminBeadsPage() {
 
   const openEditBead = (b: Bead) => {
     setEditingBead(b);
-    setBeadForm({ ...b, rotation: b.rotation || 0 });
+    setBeadForm({
+      name: b.name,
+      category: b.category,
+      price: b.price,
+      material: b.material || "Premium Acrylic",
+      imageUrl: b.imageUrl,
+      isPremium: b.isPremium,
+      rotationAllowed: b.rotationAllowed,
+      rotation: b.rotation || 0,
+      size: b.size,
+      sizeMm: b.sizeMm || 8,
+      widthMm: b.widthMm || 8,
+      active: b.active ?? true,
+    });
     setBeadPreviewUrl(b.imageUrl);
     setBeadModal("edit");
   };
@@ -224,13 +246,19 @@ export default function AdminBeadsPage() {
         rotation: beadForm.rotation || 0,
       };
       const next = [...beads, newBead];
-      persistBeads(next);
+      persistBeads(next, newBead);
       addToast("Bead Added!", `${newBead.name} added to customizer catalog.`, "success");
     } else if (editingBead) {
+      const updatedBead: Bead = {
+        ...beadForm,
+        id: editingBead.id,
+        imageUrl: imgUrl,
+        rotation: beadForm.rotation || 0,
+      };
       const next = beads.map((b) =>
-        b.id === editingBead.id ? { ...beadForm, id: editingBead.id, imageUrl: imgUrl, rotation: beadForm.rotation || 0 } : b
+        b.id === editingBead.id ? updatedBead : b
       );
-      persistBeads(next);
+      persistBeads(next, updatedBead);
       addToast("Bead Updated!", `${beadForm.name} saved with ${beadForm.rotation || 0}° rotation.`, "success");
     }
 
@@ -240,8 +268,16 @@ export default function AdminBeadsPage() {
 
   const deleteBead = (id: string) => {
     if (typeof window !== "undefined" && window.confirm("Delete this bead?")) {
+      const target = beads.find((b) => b.id === id);
       const next = beads.filter((b) => b.id !== id);
       persistBeads(next);
+      if (target) {
+        fetch("/api/beads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...target, active: false }),
+        }).catch(() => {});
+      }
       addToast("Bead Deleted", "Bead removed from customizer.", "warning");
     }
   };
@@ -273,21 +309,19 @@ export default function AdminBeadsPage() {
       <div className="flex border-b border-border/40 tabular-nums">
         <button
           onClick={() => setActiveTab("products")}
-          className={`px-5 py-2.5 text-xs font-bold transition-[color,border-color] duration-150 ease-out border-b-2 -mb-px ${
-            activeTab === "products"
+          className={`px-5 py-2.5 text-xs font-bold transition-[color,border-color] duration-150 ease-out border-b-2 -mb-px ${activeTab === "products"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           🛍️ Shop Products ({products.length})
         </button>
         <button
           onClick={() => setActiveTab("beads")}
-          className={`px-5 py-2.5 text-xs font-bold transition-[color,border-color] duration-150 ease-out border-b-2 -mb-px ${
-            activeTab === "beads"
+          className={`px-5 py-2.5 text-xs font-bold transition-[color,border-color] duration-150 ease-out border-b-2 -mb-px ${activeTab === "beads"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           🔮 Customizer Beads ({beads.length})
         </button>
@@ -302,11 +336,10 @@ export default function AdminBeadsPage() {
               <button
                 key={cat}
                 onClick={() => setProductCatFilter(cat)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${
-                  productCatFilter === cat
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${productCatFilter === cat
                     ? "bg-foreground text-background"
                     : "bg-card border border-border text-muted-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 {cat}
               </button>
@@ -349,13 +382,11 @@ export default function AdminBeadsPage() {
                 {/* Stock Level & Actions */}
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40">
                   <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      getProductStock(item.id) === 0 ? "bg-red-500" : getProductStock(item.id) <= 4 ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
-                    }`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${getProductStock(item.id) === 0 ? "bg-red-500" : getProductStock(item.id) <= 4 ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                      }`} />
                     <span className="text-[11px] text-muted-foreground font-medium">Stock:</span>
-                    <span className={`text-[11px] font-bold ${
-                      getProductStock(item.id) === 0 ? "text-destructive" : getProductStock(item.id) <= 4 ? "text-amber-600" : "text-emerald-600"
-                    }`}>
+                    <span className={`text-[11px] font-bold ${getProductStock(item.id) === 0 ? "text-destructive" : getProductStock(item.id) <= 4 ? "text-amber-600" : "text-emerald-600"
+                      }`}>
                       {getProductStock(item.id) === 0 ? "Sold Out" : `${getProductStock(item.id)} units`}
                     </span>
                   </div>
@@ -382,11 +413,10 @@ export default function AdminBeadsPage() {
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setBeadCatFilter("all")}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${
-                beadCatFilter === "all"
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all ${beadCatFilter === "all"
                   ? "bg-foreground text-background"
                   : "bg-card border border-border text-muted-foreground hover:bg-muted"
-              }`}
+                }`}
             >
               All
             </button>
@@ -397,11 +427,10 @@ export default function AdminBeadsPage() {
                 <button
                   key={cat}
                   onClick={() => setBeadCatFilter(cat)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all capitalize ${
-                    beadCatFilter === cat
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all capitalize ${beadCatFilter === cat
                       ? "bg-foreground text-background"
                       : "bg-card border border-border text-muted-foreground hover:bg-muted"
-                  }`}
+                    }`}
                 >
                   {cat} ({count})
                 </button>
@@ -521,9 +550,8 @@ export default function AdminBeadsPage() {
                   <label className="block text-xs font-bold text-foreground">
                     Available Stock Quantity (Units) *
                   </label>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    (productForm.stockQuantity ?? 10) === 0 ? "bg-red-100 text-red-700" : (productForm.stockQuantity ?? 10) <= 4 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-                  }`}>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(productForm.stockQuantity ?? 10) === 0 ? "bg-red-100 text-red-700" : (productForm.stockQuantity ?? 10) <= 4 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                    }`}>
                     {(productForm.stockQuantity ?? 10) === 0 ? "Sold Out" : `${productForm.stockQuantity ?? 10} in stock`}
                   </span>
                 </div>
@@ -812,11 +840,10 @@ export default function AdminBeadsPage() {
                         key={deg}
                         type="button"
                         onClick={() => setBeadForm({ ...beadForm, rotation: deg })}
-                        className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                          (beadForm.rotation || 0) === deg
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${(beadForm.rotation || 0) === deg
                             ? "bg-primary text-white"
                             : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
+                          }`}
                       >
                         {deg}°
                       </button>

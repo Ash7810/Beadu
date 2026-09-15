@@ -1,5 +1,57 @@
-const SESSION_COOKIE_NAME = "beadu_admin_session";
-const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "beadu-atelier-production-secret-key-2026-secure-sign";
+const SESSION_SECRET =
+  process.env.ADMIN_SESSION_SECRET ||
+  (process.env.NODE_ENV === "production"
+    ? (() => {
+        console.warn("[SECURITY WARNING]: ADMIN_SESSION_SECRET is not set in production. Using fallback secret.");
+        return "beadu-production-secret-key-2026-secure-sign";
+      })()
+    : "beadu-production-secret-key-2026-secure-sign");
+
+export const FALLBACK_ADMIN_EMAILS = ["beaduuu@gmail.com", "meet.y.7810@gmail.com"];
+
+/**
+ * Checks if the given email has administrator privileges.
+ * First checks known store owner fallbacks, then queries Supabase store_admins table.
+ */
+export async function checkIsAdmin(email?: string | null): Promise<boolean> {
+  if (!email || typeof email !== "string") return false;
+  const cleanEmail = email.trim().toLowerCase();
+  if (FALLBACK_ADMIN_EMAILS.includes(cleanEmail)) return true;
+
+  try {
+    const { getSupabaseAdmin } = await import("@/lib/supabase");
+    const adminDb = getSupabaseAdmin();
+    const { data: adminRow } = await adminDb
+      .from("store_admins")
+      .select("email")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+    return Boolean(adminRow);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verifies current request's SSR session and returns whether caller is an authenticated admin.
+ */
+export async function getAuthenticatedAdmin(): Promise<{ isAdmin: boolean; email?: string; userId?: string }> {
+  try {
+    const { createSSRClient } = await import("@/lib/supabaseServer");
+    const supabase = await createSSRClient();
+    const { data: authData } = await supabase.auth.getUser();
+
+    if (!authData?.user) {
+      return { isAdmin: false };
+    }
+
+    const email = authData.user.email?.toLowerCase();
+    const isAdmin = await checkIsAdmin(email);
+    return { isAdmin, email, userId: authData.user.id };
+  } catch {
+    return { isAdmin: false };
+  }
+}
 
 // Web Crypto HMAC-SHA256 Helper (Works in Edge Middleware and Node.js)
 async function getCryptoKey(): Promise<CryptoKey> {
@@ -14,104 +66,11 @@ async function getCryptoKey(): Promise<CryptoKey> {
 }
 
 function base64UrlEncode(str: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(str, "utf8").toString("base64url");
-  }
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return Buffer.from(str, "utf8").toString("base64url");
 }
 
 function base64UrlDecode(str: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(str, "base64url").toString("utf8");
-  }
-  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  while (base64.length % 4) base64 += "=";
-  return atob(base64);
-}
-
-/**
- * Creates a cryptographically signed admin session token: payload.signature
- */
-export async function createAdminSessionToken(email: string): Promise<string> {
-  const payload = JSON.stringify({
-    email,
-    role: "ADMIN",
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
-
-  const encodedPayload = base64UrlEncode(payload);
-  const key = await getCryptoKey();
-  const signatureBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(encodedPayload)
-  );
-
-  let binary = "";
-  const bytes = new Uint8Array(signatureBuffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const signature = base64UrlEncode(binary);
-
-  return `${encodedPayload}.${signature}`;
-}
-
-/**
- * Verifies the signed session token string
- */
-export async function verifyAdminSessionToken(
-  token?: string | null
-): Promise<{ valid: boolean; email?: string }> {
-  if (!token || typeof token !== "string") return { valid: false };
-
-  const parts = token.split(".");
-  if (parts.length !== 2) return { valid: false };
-
-  const [encodedPayload, signature] = parts;
-
-  try {
-    const key = await getCryptoKey();
-    const sigBinary = base64UrlDecode(signature);
-    const sigBytes = new Uint8Array(sigBinary.length);
-    for (let i = 0; i < sigBinary.length; i++) {
-      sigBytes[i] = sigBinary.charCodeAt(i);
-    }
-
-    const isValid = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      sigBytes,
-      new TextEncoder().encode(encodedPayload)
-    );
-
-    if (!isValid) return { valid: false };
-
-    const payloadJson = base64UrlDecode(encodedPayload);
-    const data = JSON.parse(payloadJson);
-
-    if (!data || data.role !== "ADMIN") return { valid: false };
-    if (typeof data.exp === "number" && Date.now() > data.exp) return { valid: false };
-
-    return { valid: true, email: data.email };
-  } catch {
-    return { valid: false };
-  }
-}
-
-/**
- * Server-Side helper to verify admin session from next/headers cookies
- */
-export async function getAdminSession(): Promise<{ valid: boolean; email?: string }> {
-  try {
-    const { cookies } = await import("next/headers");
-    const cookieStore = await cookies();
-    const cookie = cookieStore.get(SESSION_COOKIE_NAME);
-    if (!cookie?.value) return { valid: false };
-    return verifyAdminSessionToken(cookie.value);
-  } catch {
-    return { valid: false };
-  }
+  return Buffer.from(str, "base64url").toString("utf8");
 }
 
 export async function createPasswordResetToken(email: string): Promise<string> {
@@ -129,12 +88,7 @@ export async function createPasswordResetToken(email: string): Promise<string> {
     new TextEncoder().encode(encodedPayload)
   );
 
-  let binary = "";
-  const bytes = new Uint8Array(signatureBuffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const signature = base64UrlEncode(binary);
+  const signature = Buffer.from(signatureBuffer).toString("base64url");
 
   return `${encodedPayload}.${signature}`;
 }
@@ -151,11 +105,7 @@ export async function verifyPasswordResetToken(
 
   try {
     const key = await getCryptoKey();
-    const sigBinary = base64UrlDecode(signature);
-    const sigBytes = new Uint8Array(sigBinary.length);
-    for (let i = 0; i < sigBinary.length; i++) {
-      sigBytes[i] = sigBinary.charCodeAt(i);
-    }
+    const sigBytes = Buffer.from(signature, "base64url");
 
     const isValid = await crypto.subtle.verify(
       "HMAC",
@@ -177,5 +127,3 @@ export async function verifyPasswordResetToken(
     return { valid: false };
   }
 }
-
-export { SESSION_COOKIE_NAME };

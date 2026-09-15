@@ -55,7 +55,7 @@ export function HeroSection() {
       {/* Description Text Below Banner */}
       <div className="max-w-4xl mx-auto px-6 text-center mt-10">
         <p className="text-gray-600 font-medium leading-relaxed font-sans text-sm md:text-base">
-          Discover handmade jewellery in India by Beadu. Shop wooden, glass & clay earrings, bracelets, keychains, necklaces, cute magnets, charms & trinkets— handmade with love by artisans ✨
+          Discover handmade jewellery in India by Beadu. Shop wooden, glass & clay earrings, bracelets, keychains, necklaces, cute magnets, charms & trinkets— handmade with love by artisans.
         </p>
       </div>
     </section>

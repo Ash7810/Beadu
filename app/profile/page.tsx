@@ -19,7 +19,7 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState<"profile" | "orders" | "addresses" | "payments" | "support">("profile");
   const [mobileSubView, setMobileSubView] = useState<null | "edit-profile" | "orders" | "addresses" | "payments" | "support">(null);
-  
+
   const [selectedTrackingOrder, setSelectedTrackingOrder] = useState<Order | null>(null);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
   const [orderSearchQuery, setOrderSearchQuery] = useState("");
@@ -29,7 +29,38 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined") {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      if (tabParam && ["profile", "orders", "addresses", "payments", "support"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+        setMobileSubView(tabParam === "orders" ? "orders" : tabParam === "addresses" ? "addresses" : null);
+      }
+    }
   }, []);
+
+  // Fetch orders from server when user is authenticated
+  useEffect(() => {
+    if (user?.id) {
+      const emailQuery = user.email ? `&email=${encodeURIComponent(user.email)}` : "";
+      fetch(`/api/orders?userId=${encodeURIComponent(user.id)}${emailQuery}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.orders)) {
+            useEcomStore.setState((s) => {
+              const serverMap = new Map<string, Order>(data.orders.map((o: Order) => [o.id, o]));
+              const updated: Order[] = s.orders.map((o) => serverMap.get(o.id) || o);
+              for (const sOrd of (data.orders as Order[])) {
+                if (!s.orders.some((o) => o.id === sOrd.id)) {
+                  updated.unshift(sOrd);
+                }
+              }
+              return { orders: updated };
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.id, user?.email]);
 
   useEffect(() => {
     if (mounted && !user) {
@@ -51,12 +82,13 @@ export default function ProfilePage() {
   const userAddresses = addresses.filter((a) => (user ? a.userId === user.id : false));
 
   // Filter orders strictly for the authenticated user
-  const userOrders = orders.filter((o) =>
-    user
-      ? o.userId === user.id ||
-        (!o.userId && o.shippingAddress?.email?.toLowerCase() === user.email.toLowerCase())
-      : false
-  );
+  const userOrders = orders.filter((o) => {
+    if (!user) return false;
+    if (o.userId && o.userId === user.id) return true;
+    if (user.email && o.userId && o.userId.toLowerCase() === user.email.toLowerCase()) return true;
+    if (user.email && o.shippingAddress?.email && o.shippingAddress.email.toLowerCase() === user.email.toLowerCase()) return true;
+    return false;
+  });
 
   // Profile Data State
   const [profileData, setProfileData] = useState({
@@ -182,7 +214,7 @@ export default function ProfilePage() {
 
   const handleSaveAddress = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Ensure email is populated from user profile if not entered in form
     const addrToValidate = {
       ...newAddr,
@@ -229,8 +261,67 @@ export default function ProfilePage() {
     addToast("Ticket Raised", "Our support team will respond within 2 hours.", "success");
   };
 
-  let trackingDetails = null;
-  if (selectedTrackingOrder) {
+  const [liveTrackingData, setLiveTrackingData] = useState<any>(null);
+  const [isFetchingLiveTracking, setIsFetchingLiveTracking] = useState(false);
+
+  const fetchRealTimeTracking = async (order: Order) => {
+    if (!order.awbNumber || order.awbNumber.startsWith("DLHV")) {
+      setLiveTrackingData(null);
+      return;
+    }
+    setIsFetchingLiveTracking(true);
+    try {
+      const res = await fetch(`/api/delhivery/track?awb=${encodeURIComponent(order.awbNumber)}&orderId=${encodeURIComponent(order.id)}`);
+      const data = await res.json();
+      if (data.success && data.tracking) {
+        setLiveTrackingData(data.tracking);
+      }
+    } catch {
+      // Keep existing tracking details fallback
+    } finally {
+      setIsFetchingLiveTracking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedTrackingOrder) {
+      fetchRealTimeTracking(selectedTrackingOrder);
+    } else {
+      setLiveTrackingData(null);
+    }
+  }, [selectedTrackingOrder]);
+
+  const handleCopyText = (text: string, label: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      addToast("Copied!", `${label} copied to clipboard.`, "info");
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, status: "Cancelled" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        useEcomStore.setState((s) => ({
+          orders: s.orders.map((o) => (o.id === orderId ? { ...o, status: "Cancelled" } : o)),
+        }));
+        addToast("Order Cancelled", "Your order has been cancelled.", "info");
+      } else {
+        addToast("Cancellation Failed", data.error || "Unable to cancel.", "warning");
+      }
+    } catch {
+      addToast("Network Error", "Could not process order cancellation.", "warning");
+    }
+  };
+
+  let trackingDetails = liveTrackingData;
+  if (selectedTrackingOrder && !trackingDetails) {
     trackingDetails = generateDelhiveryTracking(
       selectedTrackingOrder.id,
       selectedTrackingOrder.createdAt,
@@ -392,11 +483,10 @@ export default function ProfilePage() {
                   <button
                     key={filter}
                     onClick={() => setOrderFilter(filter)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                      orderFilter === filter
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${orderFilter === filter
                         ? "bg-slate-900 text-white border-slate-900"
                         : "bg-white text-slate-600 border-slate-200"
-                    }`}
+                      }`}
                   >
                     {filter}
                   </button>
@@ -429,7 +519,11 @@ export default function ProfilePage() {
 
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-xs text-slate-900">
-                                {order.status === "Delivered" ? "Delivered on " : "In Transit • "}
+                                {order.status === "Delivered"
+                                  ? "Delivered on "
+                                  : order.status === "Shipped"
+                                  ? "In Transit • "
+                                  : "Order Placed • "}
                                 <span className="font-normal text-slate-600">
                                   {new Date(order.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
                                 </span>
@@ -449,15 +543,22 @@ export default function ProfilePage() {
                       <div className="flex gap-2 text-[10px] font-bold pt-1">
                         <button
                           onClick={() => setSelectedTrackingOrder(order)}
-                          className="bg-primary/10 text-primary px-3 py-1 rounded-full"
+                          className="bg-primary/10 text-primary px-3 py-1 rounded-full flex items-center gap-1.5 cursor-pointer"
                         >
-                          🚚 Live Tracking
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                          </svg>
+                          <span>Live Tracking</span>
                         </button>
                         <button
                           onClick={() => setSelectedInvoiceOrder(order)}
-                          className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200"
+                          className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200 flex items-center gap-1.5 cursor-pointer"
                         >
-                          🧾 Tax Invoice
+                          <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>Tax Invoice</span>
                         </button>
                       </div>
                     </div>
@@ -508,22 +609,20 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       onClick={() => setNewAddr({ ...newAddr, addressType: "HOME" })}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
-                        newAddr.addressType === "HOME"
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newAddr.addressType === "HOME"
                           ? "bg-primary text-white border-primary"
                           : "bg-white text-stone-700 border-stone-300"
-                      }`}
+                        }`}
                     >
                       🏠 Home
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewAddr({ ...newAddr, addressType: "WORK" })}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
-                        newAddr.addressType === "WORK"
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${newAddr.addressType === "WORK"
                           ? "bg-primary text-white border-primary"
                           : "bg-white text-stone-700 border-stone-300"
-                      }`}
+                        }`}
                     >
                       🏢 Work
                     </button>
@@ -633,9 +732,8 @@ export default function ProfilePage() {
                       <div key={addr.id} className="py-4 space-y-2 text-xs">
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-1.5">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                              isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
-                            }`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                              }`}>
                               {isHome ? "🏠 Home" : "🏢 Work"}
                             </span>
                             {addr.isDefault && (
@@ -975,7 +1073,7 @@ export default function ProfilePage() {
                 Log Out
               </button>
               <p className="text-[10px] text-stone-400 font-medium">
-                Beadu Artisan Jewellery • Handcrafted with love in India ✨
+                Beadu Artisan Jewellery • Handcrafted with love in India
               </p>
             </div>
           </div>
@@ -1001,89 +1099,172 @@ export default function ProfilePage() {
             </div>
 
             {/* Structured Navigation Panel */}
-            <div className="clay-panel overflow-hidden text-xs divide-y divide-border/40">
-              {/* MY ORDERS */}
-              <button
-                onClick={() => setActiveTab("orders")}
-                className={`w-full p-4 font-bold flex justify-between items-center transition-colors text-left ${
-                  activeTab === "orders" ? "bg-sky-50/70 text-primary" : "text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-primary text-base">📦</span>
-                  <span className="uppercase tracking-wider">My Orders</span>
-                </div>
-                <span className="text-slate-400 font-normal text-sm">›</span>
-              </button>
-
-              {/* ACCOUNT SETTINGS SECTION */}
-              <div className="p-4 space-y-2.5">
-                <div className="flex items-center gap-3 text-primary font-bold uppercase tracking-wider text-[11px]">
-                  <span>👤</span>
-                  <span>Account Settings</span>
-                </div>
-                <div className="pl-7 space-y-2">
-                  <button
-                    onClick={() => setActiveTab("profile")}
-                    className={`block text-left w-full transition-colors ${
-                      activeTab === "profile" ? "font-bold text-primary" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Profile Information
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("addresses")}
-                    className={`block text-left w-full transition-colors ${
-                      activeTab === "addresses" ? "font-bold text-primary" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Manage Addresses
-                  </button>
-                </div>
+            <div className="clay-panel overflow-hidden p-2.5 text-xs space-y-3">
+              {/* ORDERS */}
+              <div>
+                <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1">
+                  Orders
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("orders")}
+                  className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-left cursor-pointer group ${
+                    activeTab === "orders"
+                      ? "bg-[#792c14] text-white font-bold shadow-xs"
+                      : "text-stone-700 hover:bg-stone-100/80 hover:text-stone-950 font-medium"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      activeTab === "orders" ? "bg-white/20 text-white" : "bg-orange-50 text-[#792c14]"
+                    }`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <span className="truncate">My Orders</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      activeTab === "orders"
+                        ? "bg-white/20 text-white"
+                        : "bg-[#792c14]/10 text-[#792c14]"
+                    }`}>
+                      {userOrders.length}
+                    </span>
+                    <svg className={`w-3.5 h-3.5 transition-transform ${activeTab === "orders" ? "text-white" : "text-stone-400 group-hover:text-stone-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
               </div>
 
-              {/* PAYMENTS SECTION */}
-              <div className="p-4 space-y-2.5">
-                <div className="flex items-center gap-3 text-primary font-bold uppercase tracking-wider text-[11px]">
-                  <span>💳</span>
-                  <span>Payments</span>
-                </div>
-                <div className="pl-7 space-y-2">
-                  <button
-                    onClick={() => setActiveTab("payments")}
-                    className={`block text-left w-full transition-colors ${
-                      activeTab === "payments" ? "font-bold text-primary" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Saved UPI &amp; Cards
-                  </button>
-                </div>
+              {/* ACCOUNT SETTINGS */}
+              <div className="pt-2 border-t border-stone-100 space-y-1">
+                <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1">
+                  Account Settings
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("profile")}
+                  className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-left cursor-pointer group ${
+                    activeTab === "profile"
+                      ? "bg-[#792c14] text-white font-bold shadow-xs"
+                      : "text-stone-700 hover:bg-stone-100/80 hover:text-stone-950 font-medium"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      activeTab === "profile" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+                    }`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Profile Information</span>
+                  </div>
+                  <svg className={`w-3.5 h-3.5 transition-transform ${activeTab === "profile" ? "text-white" : "text-stone-400 group-hover:text-stone-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("addresses")}
+                  className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-left cursor-pointer group ${
+                    activeTab === "addresses"
+                      ? "bg-[#792c14] text-white font-bold shadow-xs"
+                      : "text-stone-700 hover:bg-stone-100/80 hover:text-stone-950 font-medium"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      activeTab === "addresses" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+                    }`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Manage Addresses</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {userAddresses.length > 0 && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        activeTab === "addresses"
+                          ? "bg-white/20 text-white"
+                          : "bg-stone-100 text-stone-600"
+                      }`}>
+                        {userAddresses.length}
+                      </span>
+                    )}
+                    <svg className={`w-3.5 h-3.5 transition-transform ${activeTab === "addresses" ? "text-white" : "text-stone-400 group-hover:text-stone-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
               </div>
 
-              {/* SUPPORT SECTION */}
-              <div className="p-4 space-y-2.5">
-                <div className="flex items-center gap-3 text-primary font-bold uppercase tracking-wider text-[11px]">
-                  <span>💬</span>
-                  <span>Customer Support</span>
-                </div>
-                <div className="pl-7 space-y-2">
-                  <button
-                    onClick={() => setActiveTab("support")}
-                    className={`block text-left w-full transition-colors ${
-                      activeTab === "support" ? "font-bold text-primary" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Help Desk &amp; Tickets
-                  </button>
-                </div>
+              {/* PAYMENTS & SUPPORT */}
+              <div className="pt-2 border-t border-stone-100 space-y-1">
+                <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1">
+                  Payments &amp; Support
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("payments")}
+                  className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-left cursor-pointer group ${
+                    activeTab === "payments"
+                      ? "bg-[#792c14] text-white font-bold shadow-xs"
+                      : "text-stone-700 hover:bg-stone-100/80 hover:text-stone-950 font-medium"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      activeTab === "payments" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+                    }`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Saved UPI &amp; Cards</span>
+                  </div>
+                  <svg className={`w-3.5 h-3.5 transition-transform ${activeTab === "payments" ? "text-white" : "text-stone-400 group-hover:text-stone-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("support")}
+                  className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between transition-all text-left cursor-pointer group ${
+                    activeTab === "support"
+                      ? "bg-[#792c14] text-white font-bold shadow-xs"
+                      : "text-stone-700 hover:bg-stone-100/80 hover:text-stone-950 font-medium"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      activeTab === "support" ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"
+                    }`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <span className="truncate">Help Desk &amp; Tickets</span>
+                  </div>
+                  <svg className={`w-3.5 h-3.5 transition-transform ${activeTab === "support" ? "text-white" : "text-stone-400 group-hover:text-stone-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
 
               {/* LOGOUT BUTTON */}
-              <div className="p-3 bg-stone-50/50">
+              <div className="pt-2 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full py-2.5 px-3 rounded-xl border border-stone-200 bg-white text-stone-600 hover:text-[#792c14] hover:bg-stone-50 font-bold text-xs transition-colors flex items-center justify-center gap-2 active:scale-[0.98] shadow-2xs"
+                  className="w-full py-2.5 px-3 rounded-xl border border-stone-200/80 bg-stone-50/50 hover:bg-stone-100 text-stone-600 hover:text-[#792c14] font-semibold text-xs transition-colors flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
                 >
                   <svg className="w-4 h-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1226,22 +1407,20 @@ export default function ProfilePage() {
                         <button
                           type="button"
                           onClick={() => setNewAddr({ ...newAddr, addressType: "HOME" })}
-                          className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${
-                            newAddr.addressType === "HOME"
+                          className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${newAddr.addressType === "HOME"
                               ? "bg-primary text-white border-primary shadow-xs"
                               : "bg-white text-stone-700 border-stone-300"
-                          }`}
+                            }`}
                         >
                           🏠 Home
                         </button>
                         <button
                           type="button"
                           onClick={() => setNewAddr({ ...newAddr, addressType: "WORK" })}
-                          className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${
-                            newAddr.addressType === "WORK"
+                          className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${newAddr.addressType === "WORK"
                               ? "bg-primary text-white border-primary shadow-xs"
                               : "bg-white text-stone-700 border-stone-300"
-                          }`}
+                            }`}
                         >
                           🏢 Work / Office
                         </button>
@@ -1403,9 +1582,8 @@ export default function ProfilePage() {
                         <div key={addr.id} className="p-5 rounded-xl border border-slate-200 bg-white space-y-2 relative text-xs hover:shadow-xs transition-shadow">
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                                isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
-                              }`}>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                                }`}>
                                 {isHome ? "🏠 Home" : "🏢 Work"}
                               </span>
                               {addr.isDefault && (
@@ -1455,45 +1633,264 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {/* 3. MY ORDERS TAB */}
+            {/* 3. MY ORDERS TAB (LAPTOP / DESKTOP VIEW) */}
             {activeTab === "orders" && (
-              <div className="space-y-6">
-                <h3 className="font-heading text-3xl text-foreground border-b border-border/40 pb-4 mb-6">My Orders</h3>
-                <div className="space-y-3">
-                  {orders.map((order) => (
-                    <div key={order.id} className="rounded border border-slate-200 bg-white p-5 space-y-4 text-xs">
-                      <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                        <span className="font-bold text-slate-900">{order.id}</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setSelectedTrackingOrder(order)}
-                            className="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1 rounded"
-                          >
-                            🚚 Live Tracking
-                          </button>
-                          <button
-                            onClick={() => setSelectedInvoiceOrder(order)}
-                            className="bg-slate-100 text-slate-700 text-[10px] font-bold px-3 py-1 rounded border border-slate-200"
-                          >
-                            🧾 Tax Invoice
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-3">
-                            <CustomBraceletPreview beads={(item.product as any).customBeads} previewImage={item.product.image} size={52} />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-slate-900 truncate">{item.product.name}</p>
-                              <p className="text-[11px] text-slate-500">Qty: {item.quantity} × ₹{item.product.price}</p>
-                            </div>
-                            <span className="font-bold text-slate-900">₹{item.product.price * item.quantity}</span>
-                          </div>
-                        ))}
-                      </div>
+              <div className="space-y-6 animate-in fade-in">
+                {/* Header with Title, Count, and Search/Filter Bar */}
+                <div className="border-b border-border/40 pb-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-heading text-3xl text-foreground font-normal">My Orders</h3>
+                      <span className="bg-[#792c14]/10 text-[#792c14] font-bold text-xs px-3 py-1 rounded-full">
+                        {userOrders.length} {userOrders.length === 1 ? "order" : "orders"}
+                      </span>
                     </div>
-                  ))}
+
+                    {/* Search Bar */}
+                    <div className="relative w-full sm:w-72">
+                      <input
+                        type="text"
+                        placeholder="Search by Order ID or item..."
+                        value={orderSearchQuery}
+                        onChange={(e) => setOrderSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 rounded-xl border border-stone-200 focus:border-[#792c14] focus:ring-1 focus:ring-[#792c14] outline-none text-xs bg-white"
+                      />
+                      <svg
+                        className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-2 pt-1">
+                    {(["All", "In Transit", "Delivered"] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        onClick={() => setOrderFilter(filter)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                          orderFilter === filter
+                            ? "bg-[#792c14] text-white shadow-xs"
+                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                        }`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Orders List */}
+                {filteredOrders.length === 0 ? (
+                  <div className="p-12 text-center border-2 border-dashed border-stone-200 rounded-3xl bg-stone-50/50 space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-[#792c14]/10 text-[#792c14] flex items-center justify-center mx-auto">
+                      <svg className="w-7 h-7 text-[#792c14]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <h4 className="font-heading text-lg text-stone-800">
+                      {orderSearchQuery ? "No matching orders found" : "You haven't placed any orders yet"}
+                    </h4>
+                    <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                      {orderSearchQuery
+                        ? "Try adjusting your search query or clear the filter to see all your orders."
+                        : "Discover our handcrafted artisan bracelets, personalized beads, and custom jewelry collections."}
+                    </p>
+                    <Link
+                      href="/shop"
+                      className="inline-block px-6 py-2.5 rounded-full bg-[#792c14] text-white font-bold text-xs hover:bg-[#68250f] transition-all shadow-md active:scale-95 mt-2"
+                    >
+                      Start Shopping →
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredOrders.map((order) => {
+                      return (
+                        <div
+                          key={order.id}
+                          className="bg-white rounded-2xl border border-stone-200/80 shadow-xs hover:shadow-sm transition-all overflow-hidden text-xs"
+                        >
+                          {/* Order Header */}
+                          <div className="px-5 py-3.5 bg-stone-50/70 border-b border-stone-100 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-mono font-bold text-sm text-stone-900 tracking-wide">
+                                #{String(order.id).replace(/^ORD-|^#/, "")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(order.id, "Order ID")}
+                                title="Copy Order ID"
+                                className="text-stone-400 hover:text-stone-700 p-1 rounded hover:bg-stone-200/60 transition-colors cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
+                              <span className="text-stone-300">•</span>
+                              <span className="text-[11px] text-stone-500 font-medium">
+                                {new Date(order.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Status Badge */}
+                              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border flex items-center gap-1.5 ${
+                                order.status === "Delivered"
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  : order.status === "Shipped"
+                                  ? "bg-purple-50 text-purple-800 border-purple-200"
+                                  : order.status === "Order Accepted"
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : order.status === "Cancelled"
+                                  ? "bg-rose-50 text-rose-800 border-rose-200"
+                                  : "bg-blue-50 text-blue-800 border-blue-200"
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  order.status === "Delivered"
+                                    ? "bg-emerald-500"
+                                    : order.status === "Shipped"
+                                    ? "bg-purple-500"
+                                    : order.status === "Order Accepted"
+                                    ? "bg-amber-500"
+                                    : order.status === "Cancelled"
+                                    ? "bg-rose-500"
+                                    : "bg-blue-500"
+                                }`} />
+                                <span>{order.status}</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Items Section */}
+                          <div className="px-5 py-4 divide-y divide-stone-100">
+                            {order.items.map((item, idx) => {
+                              const isCustom =
+                                item.product.id.startsWith("custom") || item.product.category === "Custom Builder";
+                              return (
+                                <div key={idx} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
+                                  <div className="flex items-center gap-3.5 min-w-0">
+                                    {isCustom ? (
+                                      <CustomBraceletPreview
+                                        beads={(item.product as any).customBeads}
+                                        previewImage={item.product.image}
+                                        size={56}
+                                      />
+                                    ) : (
+                                      <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-stone-100 border border-stone-200 shrink-0">
+                                        <Image
+                                          src={item.product.image}
+                                          alt={item.product.name}
+                                          fill
+                                          sizes="56px"
+                                          className="object-cover"
+                                        />
+                                      </div>
+                                    )}
+
+                                    <div className="min-w-0">
+                                      <h4 className="font-bold text-stone-900 truncate">{item.product.name}</h4>
+                                      <p className="text-[11px] text-stone-500 mt-0.5">
+                                        Qty: <span className="font-semibold text-stone-700">{item.quantity}</span> × ₹{item.product.price}
+                                      </p>
+                                      {item.giftWrap && (
+                                        <span className="inline-block mt-1 text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200/50">
+                                          Gift Wrapped (+₹20)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <span className="font-extrabold text-sm text-stone-900">
+                                      ₹{item.product.price * item.quantity}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Order Footer & Actions */}
+                          <div className="px-5 py-3.5 bg-stone-50/50 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-0.5">
+                              {order.shippingAddress && (
+                                <p className="text-[11px] text-stone-600 truncate">
+                                  <span className="font-semibold text-stone-800">Ship to:</span>{" "}
+                                  {order.shippingAddress.fullName} ({order.shippingAddress.city}, {order.shippingAddress.state})
+                                </p>
+                              )}
+                              {order.awbNumber && !order.awbNumber.startsWith("DLHV") ? (
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[11px] text-stone-500 font-mono">
+                                    Tracking ID: <strong className="text-stone-900">{order.awbNumber}</strong>
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyText(order.awbNumber || "", "Tracking ID")}
+                                    className="text-stone-400 hover:text-stone-700 text-[10px] underline cursor-pointer"
+                                  >
+                                    Copy
+                                  </button>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-amber-800/90 flex items-center gap-1.5 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                                  <span>Tracking details assigned upon dispatch</span>
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right mr-1">
+                                <span className="text-[10px] text-stone-400 uppercase tracking-wider block font-semibold">Total</span>
+                                <span className="font-extrabold text-base text-[#792c14]">₹{order.total}</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTrackingOrder(order)}
+                                className="px-3.5 py-2 rounded-xl bg-[#792c14] hover:bg-[#68250f] text-white font-semibold text-xs transition-all shadow-2xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                                </svg>
+                                <span>Track</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedInvoiceOrder(order)}
+                                className="px-3 py-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 font-semibold text-xs transition-colors shadow-2xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Invoice</span>
+                              </button>
+
+                              {order.status === "Order Placed" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelOrder(order.id)}
+                                  className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50/60 hover:bg-rose-100/80 text-rose-700 font-semibold text-xs transition-colors shadow-2xs active:scale-95 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1537,26 +1934,141 @@ export default function ProfilePage() {
         </div>
       </main>
 
-      {/* Tracking Modal */}
+      {/* Live Order Tracking Modal */}
       {selectedTrackingOrder && trackingDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setSelectedTrackingOrder(null)} />
-          <div className="relative bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl space-y-4 z-10 text-xs border border-slate-200">
-            <div className="flex justify-between items-center pb-2 border-b">
-              <h3 className="font-bold text-sm text-slate-900">Live Order Tracking ({selectedTrackingOrder.id})</h3>
-              <button onClick={() => setSelectedTrackingOrder(null)}>✕</button>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedTrackingOrder(null)} />
+          <div className="relative bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 z-10 text-xs border border-stone-200 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start pb-3 border-b border-stone-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-heading text-xl text-stone-900">Shipment Tracker</h3>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                    selectedTrackingOrder.status === "Delivered"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : selectedTrackingOrder.status === "Shipped"
+                      ? "bg-purple-100 text-purple-800"
+                      : selectedTrackingOrder.status === "Order Accepted"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}>
+                    {selectedTrackingOrder.status}
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-500 font-mono mt-0.5">Order ID: #{String(selectedTrackingOrder.id).replace(/^ORD-|^#/, "")}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchRealTimeTracking(selectedTrackingOrder)}
+                  disabled={isFetchingLiveTracking}
+                  title="Refresh tracking status"
+                  className="px-2.5 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] font-bold transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  <span className={isFetchingLiveTracking ? "animate-spin" : ""}>🔄</span>
+                  <span>{isFetchingLiveTracking ? "Checking..." : "Refresh"}</span>
+                </button>
+                <button
+                  onClick={() => setSelectedTrackingOrder(null)}
+                  className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <p className="font-bold text-primary">Estimated Delivery: {trackingDetails.estimatedDeliveryDate}</p>
-            <div className="space-y-3">
-              {trackingDetails.steps.map((step, idx) => (
-                <div key={idx} className="flex gap-3">
-                  <span className="font-bold">{step.completed ? "✓" : "○"}</span>
-                  <div>
-                    <p className="font-bold">{step.status}</p>
-                    <p className="text-[11px] text-slate-500">{step.location} • {step.timestamp}</p>
+
+            {/* Courier & AWB Banner */}
+            {selectedTrackingOrder.awbNumber && !selectedTrackingOrder.awbNumber.startsWith("DLHV") ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Tracking Number</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs font-bold text-emerald-950">{selectedTrackingOrder.awbNumber}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(selectedTrackingOrder.awbNumber || "", "Tracking Number")}
+                      className="text-emerald-700 hover:underline text-[10px] font-semibold cursor-pointer"
+                    >
+                      Copy
+                    </button>
                   </div>
                 </div>
-              ))}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100/90 border border-emerald-300/70 text-emerald-900 font-semibold text-[11px] shrink-0 shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  <span>Express Courier Verified</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 space-y-1">
+                <div className="flex items-center gap-2 text-amber-900 font-bold text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>
+                    {selectedTrackingOrder.status === "Order Accepted"
+                      ? "Order Accepted — Preparing for Courier Handover"
+                      : "Order Placed — Order Confirmed & Queued"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                  Live tracking updates will activate as soon as the package is handed over to the courier partner.
+                </p>
+              </div>
+            )}
+
+            {/* Estimated Delivery Note */}
+            <div className="flex items-center justify-between text-[11px] px-1 text-stone-600">
+              <span>Expected Delivery:</span>
+              <strong className="text-[#792c14] font-bold">{trackingDetails.estimatedDeliveryDate}</strong>
+            </div>
+
+            {/* Tracking Steps Timeline */}
+            <div className="space-y-4 pt-2 border-t border-stone-100">
+              {trackingDetails.steps.map((step: any, idx: number) => {
+                const isLast = idx === trackingDetails.steps.length - 1;
+                return (
+                  <div key={idx} className="flex items-start gap-3.5 relative">
+                    {/* Connecting Vertical Line */}
+                    {!isLast && (
+                      <div
+                        className={`absolute left-3.5 top-7 bottom-0 w-0.5 -translate-x-1/2 ${
+                          step.completed ? "bg-emerald-500" : "bg-stone-200"
+                        }`}
+                      />
+                    )}
+
+                    {/* Step Icon */}
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 z-10 transition-colors ${
+                        step.completed
+                          ? "bg-emerald-600 text-white shadow-2xs ring-4 ring-emerald-100"
+                          : "bg-stone-100 text-stone-400 border border-stone-300"
+                      }`}
+                    >
+                      {step.completed ? "✓" : idx + 1}
+                    </div>
+
+                    {/* Step Info */}
+                    <div className="space-y-0.5 flex-1 min-w-0 pb-3">
+                      <div className="flex justify-between items-center gap-2">
+                        <p className={`font-bold text-xs ${step.completed ? "text-stone-900" : "text-stone-400"}`}>
+                          {step.status}
+                        </p>
+                        <span className="text-[10px] text-stone-400 shrink-0 font-medium">
+                          {step.timestamp}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-500 leading-snug">
+                        {step.description}
+                      </p>
+                      {step.location && (
+                        <p className="text-[10px] text-stone-400 font-medium">
+                          📍 {step.location}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1568,7 +2080,7 @@ export default function ProfilePage() {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setSelectedInvoiceOrder(null)} />
           <div className="relative bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl space-y-4 z-10 text-xs border border-slate-200">
             <div className="flex justify-between items-center pb-2 border-b">
-              <h3 className="font-bold text-sm text-slate-900">Tax Invoice (#{selectedInvoiceOrder.id})</h3>
+              <h3 className="font-bold text-sm text-slate-900">Tax Invoice (#{String(selectedInvoiceOrder.id).replace(/^ORD-|^#/, "")})</h3>
               <button onClick={() => setSelectedInvoiceOrder(null)}>✕</button>
             </div>
             <p className="font-bold text-slate-900">Total Paid: ₹{selectedInvoiceOrder.total}</p>

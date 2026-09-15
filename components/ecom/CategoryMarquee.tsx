@@ -56,16 +56,6 @@ export function CategoryMarquee() {
                 sizes="(max-width: 768px) 160px, 192px"
                 className="object-cover"
               />
-              {!cat.isCustomGraphic && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 bg-white/15 backdrop-blur-[1px]">
-                  <span className="font-heading text-xl md:text-2xl text-black font-bold text-center tracking-wider drop-shadow-sm bg-white/80 backdrop-blur-xs px-3 py-1 rounded-lg ring-1 ring-black/5 rotate-[-3deg]">
-                    {cat.name}
-                  </span>
-                  <span className="mt-6 text-[9px] uppercase tracking-widest text-black/90 font-bold bg-white/60 px-2 py-0.5 rounded-md">
-                    Shop Now
-                  </span>
-                </div>
-              )}
             </Link>
           ))}
         </div>

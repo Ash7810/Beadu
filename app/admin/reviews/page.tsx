@@ -64,7 +64,7 @@ export default function AdminReviewsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900">⭐ Reviews &amp; Moderation Hub</h1>
+          <h1 className="text-2xl font-bold text-stone-900">Reviews &amp; Moderation Hub</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Monitor customer feedback, verify buyer authentications, and moderate customer photos.
           </p>
@@ -185,8 +185,8 @@ export default function AdminReviewsPage() {
                     {/* Customer Info */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-sm border border-stone-200 shrink-0">
-                          {rev.userAvatar || "👤"}
+                        <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-sm border border-stone-200 shrink-0 font-bold text-stone-600">
+                          {rev.userAvatar || rev.userName?.charAt(0)?.toUpperCase() || "U"}
                         </div>
                         <div>
                           <span className="font-bold text-stone-900 block">{rev.userName}</span>

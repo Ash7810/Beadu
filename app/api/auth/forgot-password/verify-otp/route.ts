@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
     const verification = verifyPasswordResetOtp(cleanEmail, cleanOtp);
     if (!verification.valid) {
       return NextResponse.json(
-        { success: false, error: verification.message || "Invalid or expired verification code." },
+        {
+          success: false,
+          error: verification.message || "Invalid or expired verification code.",
+          attemptsLeft: verification.attemptsLeft,
+          maxAttemptsExceeded: verification.maxAttemptsExceeded,
+        },
         { status: 400 }
       );
     }

@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/authServer";
+import { createSSRClient } from "@/lib/supabaseServer";
 
-export async function POST() {
-  const response = NextResponse.json({ success: true, message: "Logged out successfully." });
-  response.cookies.delete(SESSION_COOKIE_NAME);
-  return response;
+async function handleLogout() {
+  const supabase = await createSSRClient();
+  await supabase.auth.signOut();
+  return NextResponse.json({ success: true, message: "Logged out successfully." });
 }
 
-export async function GET() {
-  const response = NextResponse.json({ success: true, message: "Logged out successfully." });
-  response.cookies.delete(SESSION_COOKIE_NAME);
-  return response;
-}
+export { handleLogout as GET, handleLogout as POST };

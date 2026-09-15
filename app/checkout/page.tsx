@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,7 +11,6 @@ import { BottomNavigation } from "@/components/ecom/BottomNavigation";
 import { Toast } from "@/components/ecom/Toast";
 import { useEcomStore, Address } from "@/store/ecomStore";
 import { useAuthStore } from "@/store/authStore";
-import { PaymentMethod } from "@/lib/smePay";
 import { checkDelhiveryServiceability, validateOrderAddressForDelhivery } from "@/lib/delhivery";
 import { CustomBraceletPreview } from "@/components/builder/CustomBraceletPreview";
 
@@ -33,7 +32,7 @@ export default function CheckoutPage() {
     addresses,
     addAddress,
     updateAddress,
-    createOrder,
+    addServerOrder,
     getCartSubtotal,
     getGiftWrapTotal,
     getPlatformFee,
@@ -54,8 +53,146 @@ export default function CheckoutPage() {
   const [showAddressForm, setShowAddressForm] = useState<boolean>(true);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
 
-  const paymentMode: PaymentMethod = "UPI";
+  const [paymentMode, setPaymentMode] = useState<"UPI" | "COD">("COD");
   const [isProcessing, setIsProcessing] = useState(false);
+  const isFulfillingRef = useRef(false);
+
+  // Helper to remove any orphan SMEPay iframes and restore body scrolling
+  const cleanupLingeringSmeIframe = useCallback(() => {
+    if (typeof document !== "undefined") {
+      const iframes = document.querySelectorAll('iframe[src*="smepay"], iframe[title*="SMEPay"]');
+      iframes.forEach((el) => {
+        try {
+          el.remove();
+        } catch {}
+      });
+      document.body.style.overflow = "";
+    }
+  }, []);
+
+  // Proactive recovery from cancelled, backed, or closed payment modals
+  useEffect(() => {
+    if (!isProcessing) return;
+
+    // 1. Listen for Escape key to close payment state
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isProcessing && !isFulfillingRef.current) {
+        cleanupLingeringSmeIframe();
+        setIsProcessing(false);
+        addToast("Payment Cancelled", "Payment window was closed.", "info");
+      }
+    };
+
+    // 2. Listen for browser back button navigation (popstate)
+    const handlePopState = () => {
+      if (isProcessing && !isFulfillingRef.current) {
+        cleanupLingeringSmeIframe();
+        setIsProcessing(false);
+      }
+    };
+
+    // 3. Listen for postMessage from SMEPay widget
+    const handleMessage = (e: MessageEvent) => {
+      const msg = e.data;
+      if (!msg) return;
+      if (
+        msg.event === "smepay.close" ||
+        msg.event === "smepay.cancelled" ||
+        (msg.event === "smepay.payment" &&
+          (msg.status === "closed" || msg.status === "failed" || msg.status === "cancelled")) ||
+        msg.status === "closed" ||
+        msg.status === "failed" ||
+        msg.status === "cancelled"
+      ) {
+        if (!isFulfillingRef.current) {
+          cleanupLingeringSmeIframe();
+          setIsProcessing(false);
+          addToast("Payment Cancelled", "Payment window was closed or cancelled.", "warning");
+        }
+      }
+    };
+
+    // 4. MutationObserver: detect when SMEPay iframe is removed from document.body
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.removedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) {
+            const isSme =
+              (node.tagName === "IFRAME" &&
+                (node.getAttribute("title")?.includes("SMEPay") ||
+                  node.getAttribute("src")?.includes("smepay"))) ||
+              node.querySelector?.('iframe[src*="smepay"], iframe[title*="SMEPay"]');
+            if (isSme && !isFulfillingRef.current) {
+              setIsProcessing(false);
+              document.body.style.overflow = "";
+            }
+          }
+        });
+      }
+    });
+
+    // 5. Periodic heartbeat check: if isProcessing has been active for >2s and NO iframe exists
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !isFulfillingRef.current) {
+        const hasIframe = !!document.querySelector('iframe[src*="smepay"], iframe[title*="SMEPay"]');
+        if (!hasIframe) {
+          setIsProcessing(false);
+          document.body.style.overflow = "";
+        }
+      }
+    }, 1200);
+
+    // 6. Window focus / visibilitychange
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isFulfillingRef.current) {
+        setTimeout(() => {
+          const hasIframe = !!document.querySelector('iframe[src*="smepay"], iframe[title*="SMEPay"]');
+          if (!hasIframe && !isFulfillingRef.current) {
+            setIsProcessing(false);
+            document.body.style.overflow = "";
+          }
+        }, 1000);
+      }
+    };
+
+    const handleWindowError = (e: ErrorEvent) => {
+      const errStr = String(e.message || "");
+      const fileStr = String(e.filename || "");
+      if (errStr.includes("M_ID") || fileStr.includes("chrome-extension://")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    };
+
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      const errStr = String(e.reason?.message || e.reason || "");
+      if (errStr.includes("M_ID") || String(e.reason?.stack || "").includes("chrome-extension://")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    };
+
+    window.addEventListener("error", handleWindowError, true);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("message", handleMessage);
+    window.addEventListener("pageshow", handleVisibilityChange);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection, true);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.removeEventListener("error", handleWindowError, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("pageshow", handleVisibilityChange);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection, true);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, [isProcessing, cleanupLingeringSmeIframe, addToast]);
 
   const [addrForm, setAddrForm] = useState<{
     fullName: string;
@@ -189,7 +326,7 @@ export default function CheckoutPage() {
 
   const handleSaveAddressForm = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Comprehensive Delhivery manifestation validation
     const validation = validateOrderAddressForDelhivery(addrForm);
     if (!validation.valid) {
@@ -226,7 +363,7 @@ export default function CheckoutPage() {
       const validation = validateOrderAddressForDelhivery(addrForm);
       if (!validation.valid) {
         setShowAddressForm(true);
-        addToast("Address Incomplete", validation.message || "Please complete all required shipping fields to manifest your order.", "warning");
+        addToast("Address Incomplete", validation.message || "Please complete all required shipping fields to proceed with your order.", "warning");
         return;
       }
 
@@ -251,6 +388,66 @@ export default function CheckoutPage() {
     }
 
     setIsProcessing(true);
+    isFulfillingRef.current = false;
+
+    const fulfillUpiOrder = async (txId: string, callbackUrl?: string) => {
+      isFulfillingRef.current = true;
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: cart,
+            shippingAddress: selectedAddr,
+            paymentMode,
+            transactionId: txId,
+            userId: user?.id,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!data.success || !data.order) {
+          throw new Error(data.error || "Failed to place order on server");
+        }
+
+        useEcomStore.getState().addServerOrder(data.order);
+        clearCart();
+        addToast(
+          paymentMode === "COD" ? "Order Confirmed!" : "Payment Successful",
+          paymentMode === "COD"
+            ? "Your Cash on Delivery order has been placed successfully!"
+            : "Payment authorized. Your order has been placed!",
+          "success"
+        );
+
+        if (callbackUrl) {
+          try {
+            const target = new URL(callbackUrl, window.location.origin);
+            target.searchParams.set("orderId", data.order.id);
+            target.searchParams.set("txId", txId);
+            target.searchParams.set("payment", paymentMode);
+            window.location.href = target.toString();
+          } catch {
+            router.push(`/order-success?orderId=${data.order.id}&txId=${txId}&payment=${paymentMode}`);
+          }
+        } else {
+          router.push(`/order-success?orderId=${data.order.id}&txId=${txId}&payment=${paymentMode}`);
+        }
+      } catch (e: any) {
+        console.warn("Server order sync error:", e);
+        addToast("Order Error", e?.message || "Could not complete order creation. Please contact support.", "warning");
+        isFulfillingRef.current = false;
+        cleanupLingeringSmeIframe();
+        setIsProcessing(false);
+      }
+    };
+
+    // ── Instant Cash on Delivery (COD) Mode ──
+    if (paymentMode === "COD") {
+      await fulfillUpiOrder(`COD-${Date.now()}`);
+      return;
+    }
 
     try {
       // Instant UPI via SMEPay Widget
@@ -271,37 +468,10 @@ export default function CheckoutPage() {
       const createData = await createRes.json();
       if (!createData.success || !createData.order_slug) {
         addToast("Payment Error", "Unable to initialize UPI payment gateway. Please try again later.", "warning");
+        cleanupLingeringSmeIframe();
         setIsProcessing(false);
         return;
       }
-
-      const fulfillUpiOrder = async (txId: string, callbackUrl?: string) => {
-        try {
-          await fetch("/api/orders", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              items: cart,
-              shippingAddress: selectedAddr,
-              paymentMode: "UPI",
-              transactionId: txId,
-              userId: user?.id,
-            }),
-          });
-        } catch (e) {
-          console.warn("Server order sync notice:", e);
-        }
-
-        const newOrder = createOrder(selectedAddr, "UPI", txId, user?.id);
-        clearCart();
-        addToast("Payment Successful", "Payment authorized. Your order has been placed!", "success");
-
-        if (callbackUrl) {
-          window.location.href = callbackUrl;
-        } else {
-          router.push(`/order-success?orderId=${newOrder.id}&txId=${txId}`);
-        }
-      };
 
       // Ensure widget script is ready (poll up to 1.5s in case of network latency)
       let attempts = 0;
@@ -310,7 +480,14 @@ export default function CheckoutPage() {
         attempts++;
       }
 
-      // Step 2: Launch SMEPay Checkout Widget
+      // Step 2: Launch SMEPay Checkout Widget or Simulated Payment
+      if (createData.simulated || !createData.order_slug || createData.order_slug.startsWith("sim_slug_")) {
+        // Fallback simulation in development mode when SMEPay live credentials are not configured in .env
+        addToast("Simulated UPI Mode", "SMEPay credentials not configured — placing test order.", "info");
+        await fulfillUpiOrder(`UPI-SIM-${Date.now()}`);
+        return;
+      }
+
       if (typeof window !== "undefined" && window.smepayCheckout) {
         window.smepayCheckout({
           slug: createData.order_slug,
@@ -333,14 +510,13 @@ export default function CheckoutPage() {
             }
           },
           onFailure: () => {
+            cleanupLingeringSmeIframe();
             setIsProcessing(false);
             addToast("Payment Cancelled", "Payment window was closed or cancelled.", "warning");
           },
         });
-      } else if (createData.simulated) {
-        // Fallback simulation in local development mode
-        await fulfillUpiOrder(`UPI-SIM-${Date.now()}`);
       } else {
+        cleanupLingeringSmeIframe();
         setIsProcessing(false);
         addToast(
           "Payment Gateway Unavailable",
@@ -349,6 +525,7 @@ export default function CheckoutPage() {
         );
       }
     } catch {
+      cleanupLingeringSmeIframe();
       setIsProcessing(false);
       addToast("Error", "Could not complete transaction. Please try again.", "warning");
     }
@@ -428,19 +605,17 @@ export default function CheckoutPage() {
                       <div
                         key={addr.id}
                         onClick={() => setSelectedAddressId(addr.id)}
-                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                          isSelected
+                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${isSelected
                             ? "border-primary bg-primary/5 shadow-md ring-1 ring-primary/30"
                             : "border-border/60 hover:border-primary/40 bg-white"
-                        }`}
+                          }`}
                       >
                         <div>
                           <div className="flex justify-between items-start gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-xs text-foreground">{addr.fullName}</span>
-                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                                isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
-                              }`}>
+                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${isHome ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                                }`}>
                                 {isHome ? "🏠 Home" : "🏢 Work"}
                               </span>
                               {addr.isDefault && (
@@ -506,22 +681,20 @@ export default function CheckoutPage() {
                       <button
                         type="button"
                         onClick={() => setAddrForm({ ...addrForm, addressType: "HOME" })}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                          addrForm.addressType === "HOME"
+                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${addrForm.addressType === "HOME"
                             ? "bg-primary text-white border-primary shadow-xs"
                             : "bg-white text-stone-700 border-stone-300 hover:border-primary/40"
-                        }`}
+                          }`}
                       >
                         🏠 Home
                       </button>
                       <button
                         type="button"
                         onClick={() => setAddrForm({ ...addrForm, addressType: "WORK" })}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                          addrForm.addressType === "WORK"
+                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${addrForm.addressType === "WORK"
                             ? "bg-primary text-white border-primary shadow-xs"
                             : "bg-white text-stone-700 border-stone-300 hover:border-primary/40"
-                        }`}
+                          }`}
                       >
                         🏢 Work / Office
                       </button>
@@ -667,25 +840,77 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            {/* Step 2: Payment Method — UPI Only */}
+            {/* Step 2: Payment Method */}
             <div className="clay-panel p-6 bg-white space-y-4">
               <h3 className="font-heading text-xl text-foreground pb-3 border-b border-border/40">
                 2. Payment Method
               </h3>
 
-              <div className="flex items-center justify-between p-4 rounded-2xl border-2 border-primary bg-primary/5 shadow-md">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">📱</span>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">UPI (Google Pay / PhonePe / Paytm / QR)</p>
-                    <p className="text-[10px] text-muted-foreground">Scan QR code or pay instantly via any UPI app</p>
+              <div className="space-y-3">
+                {/* Cash on Delivery (COD) Option */}
+                <div
+                  onClick={() => setPaymentMode("COD")}
+                  className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer select-none ${
+                    paymentMode === "COD"
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-foreground">Cash on Delivery (COD)</p>
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                          Pay Upon Delivery
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Pay in cash or UPI to delivery executive at your doorstep</p>
+                    </div>
                   </div>
+                  {paymentMode === "COD" ? (
+                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">Selected</span>
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border border-gray-300 inline-block" />
+                  )}
                 </div>
-                <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">Selected</span>
+
+                {/* Instant UPI Option */}
+                <div
+                  onClick={() => setPaymentMode("UPI")}
+                  className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer select-none ${
+                    paymentMode === "UPI"
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Instant UPI (Google Pay / PhonePe / Paytm / QR)</p>
+                      <p className="text-[10px] text-muted-foreground">Scan QR code or pay instantly via any UPI app</p>
+                    </div>
+                  </div>
+                  {paymentMode === "UPI" ? (
+                    <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">Selected</span>
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border border-gray-300 inline-block" />
+                  )}
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-muted-foreground font-medium border-t border-border/30">
-                <span className="text-emerald-600 font-bold">🔒</span>
+                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
                 <span>256-Bit SSL Bank-Grade Encryption • 100% Safe &amp; Secure</span>
               </div>
             </div>
@@ -744,14 +969,38 @@ export default function CheckoutPage() {
             <button
               onClick={handlePlaceOrder}
               disabled={isProcessing}
-              className="w-full bg-[#7c2d12] hover:bg-[#9a3412] text-white text-xs font-bold uppercase tracking-wider py-4 rounded-2xl shadow-lg transition-transform duration-150 ease-out active:scale-[0.96] disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[#7c2d12] hover:bg-[#9a3412] text-white text-xs font-bold uppercase tracking-wider py-4 rounded-2xl shadow-lg transition-transform duration-150 ease-out active:scale-[0.96] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
             >
               {isProcessing ? (
-                <span>Processing Order...</span>
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Processing Order...
+                </span>
+              ) : paymentMode === "COD" ? (
+                <span>Place Order (Cash on Delivery) • ₹{grandTotal}</span>
               ) : (
                 <span>Pay ₹{grandTotal} with Instant UPI</span>
               )}
             </button>
+
+            {isProcessing && (
+              <div className="text-center pt-2 animate-in fade-in">
+                <button
+                  type="button"
+                  onClick={() => {
+                    cleanupLingeringSmeIframe();
+                    setIsProcessing(false);
+                    addToast("Payment Reset", "Payment state was cleared. You can try again.", "info");
+                  }}
+                  className="text-xs text-muted-foreground hover:text-brand-secondary underline transition-colors cursor-pointer font-medium inline-block py-1"
+                >
+                  Modal closed or cancelled? Tap here to retry
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -759,11 +1008,11 @@ export default function CheckoutPage() {
       <Footer />
       <BottomNavigation />
       <Toast />
-      
+
       {/* SMEPay / Instant UPI Modal Widget */}
-      <Script 
-        src="https://typof.co/smepay/checkout-v2.js" 
-        strategy="afterInteractive" 
+      <Script
+        src="https://typof.co/smepay/checkout-v2.js"
+        strategy="afterInteractive"
       />
     </div>
   );

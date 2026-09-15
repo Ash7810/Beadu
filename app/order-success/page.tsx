@@ -21,7 +21,6 @@ function OrderSuccessContent() {
 
   const orderId = searchParams.get("orderId") || searchParams.get("order_id");
   const txId = searchParams.get("txId") || searchParams.get("transactionId");
-  const slug = searchParams.get("slug");
 
   const [order, setOrder] = useState<Order | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -34,18 +33,38 @@ function OrderSuccessContent() {
     if (!mounted) return;
 
     if (orderId) {
-      const found = orders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
+      const cleanId = orderId.replace(/^ORD-|^#/, "");
+      const found = orders.find((o) => o.id.toLowerCase() === orderId.toLowerCase() || o.id === cleanId);
       if (found) {
         setOrder(found);
         return;
       }
-    }
 
-    // Fallback: Show the most recent order if available
-    if (orders.length > 0) {
+      // Fetch verified order from server (supports guest checkout and payment app redirects)
+      const txParam = txId ? `&txId=${encodeURIComponent(txId)}` : "";
+      fetch(`/api/orders?orderId=${encodeURIComponent(cleanId)}${txParam}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.orders) && data.orders.length > 0) {
+            const ord = data.orders[0];
+            setOrder(ord);
+            useEcomStore.setState((s) => {
+              if (!s.orders.some((o) => o.id === ord.id)) {
+                return { orders: [ord, ...s.orders] };
+              }
+              return s;
+            });
+          } else if (orders.length > 0) {
+            setOrder(orders[0]);
+          }
+        })
+        .catch(() => {
+          if (orders.length > 0) setOrder(orders[0]);
+        });
+    } else if (orders.length > 0) {
       setOrder(orders[0]);
     }
-  }, [mounted, orderId, orders]);
+  }, [mounted, orderId, txId, orders]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
@@ -71,18 +90,20 @@ function OrderSuccessContent() {
           </div>
 
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#7c2d12] mb-1">
-            Payment Confirmed & Verified
+            {order?.paymentMode === "COD" ? "Order Confirmed • Cash on Delivery" : "Payment Confirmed & Verified"}
           </p>
           <h1 className="font-heading text-3xl sm:text-4xl text-foreground font-bold mb-3">
             Thank you for your order!
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-            Your handcrafted artisan creation has been received. Our atelier craftsmen are preparing your pieces for express insured dispatch.
+            {order?.paymentMode === "COD"
+              ? "Your handcrafted artisan creation has been received. Please keep exact cash or UPI ready at the time of delivery."
+              : "Your handcrafted artisan creation has been received. Our team is preparing your pieces for express insured dispatch."}
           </p>
 
           <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-2 sm:gap-4 bg-muted/30 px-5 py-2.5 rounded-full border border-border/50 text-xs">
             <span className="text-muted-foreground">Order Reference:</span>
-            <span className="font-mono font-bold text-foreground">{order?.id || orderId || "BDU-CONFIRMED"}</span>
+            <span className="font-mono font-bold text-foreground">#{String(order?.id || orderId || "1001").replace(/^ORD-|^#/, "")}</span>
             {txId && (
               <>
                 <span className="text-border">|</span>
@@ -112,7 +133,9 @@ function OrderSuccessContent() {
                   <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
                     {order.status}
                   </span>
-                  <p className="text-[10px] text-muted-foreground mt-1">Paid via {order.paymentMode}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {order.paymentMode === "COD" ? "Cash on Delivery" : `Paid via ${order.paymentMode}`}
+                  </p>
                 </div>
               </div>
 
@@ -199,10 +222,17 @@ function OrderSuccessContent() {
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     Express Shipment Tracking
                   </p>
-                  <p className="font-semibold text-foreground">Standard Express Courier</p>
-                  <p className="text-muted-foreground">
-                    AWB Tracking: <span className="font-mono font-bold text-foreground">{order.awbNumber}</span>
-                  </p>
+                  <p className="font-semibold text-foreground">Express Insured Delivery</p>
+                  {order.awbNumber && !order.awbNumber.startsWith("DLHV") ? (
+                    <p className="text-muted-foreground">
+                      Tracking ID: <span className="font-mono font-bold text-foreground">{order.awbNumber}</span>
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground flex items-center gap-1.5 text-[11px] pt-0.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse inline-block" />
+                      <span>Tracking details assigned upon dispatch</span>
+                    </p>
+                  )}
                   <p className="text-emerald-700 font-semibold pt-1">
                     Estimated Delivery: 3 - 5 Business Days
                   </p>
@@ -220,7 +250,7 @@ function OrderSuccessContent() {
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
           {user ? (
             <Link
-              href="/profile"
+              href="/profile?tab=orders"
               className="bg-[#7c2d12] hover:bg-[#9a3412] text-white text-xs font-bold uppercase tracking-wider px-8 py-3.5 rounded-full text-center shadow-md transition-all active:scale-[0.97]"
             >
               View Orders in Profile

@@ -79,7 +79,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
               onClick={onClose}
               className="px-4 py-3 rounded-xl text-sm font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-transform duration-150 ease-out active:scale-[0.96] flex items-center justify-between"
             >
-              <span>✨ Custom Bracelet Builder</span>
+              <span>Custom Bracelet Builder</span>
               <span className="text-primary text-xs">→</span>
             </Link>
 

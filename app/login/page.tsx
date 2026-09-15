@@ -61,9 +61,6 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    // Artificial delay for UX
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
     let result;
     if (isLogin) {
       result = await login(email.trim().toLowerCase(), password.trim());
@@ -73,7 +70,8 @@ export default function LoginPage() {
 
     if (result.success) {
       const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") || (email.trim().toLowerCase() === "admin@beadu.in" ? "/admin" : "/");
+      const currentUser = useAuthStore.getState().user;
+      const callbackUrl = params.get("callbackUrl") || (currentUser?.role === "ADMIN" ? "/admin" : "/");
       router.push(callbackUrl);
     } else {
       setErrorMsg(result.error || "An unexpected error occurred.");

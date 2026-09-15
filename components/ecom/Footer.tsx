@@ -11,43 +11,43 @@ export function Footer() {
           <h3 className="font-heading text-2xl font-normal text-foreground">Quick Links</h3>
           <ul className="space-y-2.5 text-xs text-muted-foreground">
             <li>
-              <Link href="/about" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>📍</span> <span>Our Story</span>
+              <Link href="/about" className="hover:text-primary transition-colors block">
+                <span>Our Story</span>
               </Link>
             </li>
             <li>
-              <Link href="/" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>🏠</span> <span>Home</span>
+              <Link href="/" className="hover:text-primary transition-colors block">
+                <span>Home</span>
               </Link>
             </li>
             <li>
-              <Link href="/shop" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>🛍️</span> <span>Shop</span>
+              <Link href="/shop" className="hover:text-primary transition-colors block">
+                <span>Shop Collections</span>
               </Link>
             </li>
             <li>
-              <Link href="/cart" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>🛒</span> <span>Cart</span>
+              <Link href="/cart" className="hover:text-primary transition-colors block">
+                <span>Cart</span>
               </Link>
             </li>
             <li>
-              <Link href="/checkout" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>✔</span> <span>Checkout</span>
+              <Link href="/checkout" className="hover:text-primary transition-colors block">
+                <span>Checkout</span>
               </Link>
             </li>
             <li>
-              <Link href="/profile" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>👤</span> <span>My Account</span>
+              <Link href="/profile" className="hover:text-primary transition-colors block">
+                <span>My Account</span>
               </Link>
             </li>
             <li>
-              <Link href="/privacy" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>🛡️</span> <span>Privacy Policy</span>
+              <Link href="/privacy" className="hover:text-primary transition-colors block">
+                <span>Privacy Policy</span>
               </Link>
             </li>
             <li>
-              <Link href="/returns" className="hover:text-primary transition-colors flex items-center gap-2">
-                <span>🔄</span> <span>Return & Exchange Policy</span>
+              <Link href="/returns" className="hover:text-primary transition-colors block">
+                <span>Return &amp; Exchange Policy</span>
               </Link>
             </li>
           </ul>
@@ -57,7 +57,7 @@ export function Footer() {
         <div className="md:col-span-5 space-y-4">
           <h3 className="font-heading text-2xl font-normal text-foreground">About Us</h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Beadu – is a handmade jewellery business where each piece is handcrafted with love and care! We believe jewellery is an expression of emotions, transcending mere accessories. Our products are crafted with natural, versatile, and eco-friendly material such as wood, glass, clay. Choose from our diverse range of colors, styles, and themes, or opt for a custom order to create a truly unique piece. We hope you have a great shopping experience with us!! 🥰
+            Beadu is an artisanal handmade jewellery studio where each piece is handcrafted with care by skilled artisans in Jaipur. Our jewelry is crafted with authentic gemstones, glass beads, and versatile elements. Choose from our curated catalog or design a bespoke bracelet in our builder.
           </p>
         </div>
 

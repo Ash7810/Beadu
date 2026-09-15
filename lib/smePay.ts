@@ -139,6 +139,16 @@ export async function validateSMEPayOrder(params: ValidateOrderParams): Promise<
     }
   }
 
+  // In production, reject simulated verification unless explicitly permitted via environment
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PAYMENT_SIMULATION !== "true") {
+    return {
+      verified: false,
+      transactionId: "",
+      paymentStatus: "FAILED",
+      error: "Live payment verification required in production. Please check SMEPay gateway credentials.",
+    };
+  }
+
   // Simulated / Dev Verification
   return {
     verified: true,
@@ -148,15 +158,3 @@ export async function validateSMEPayOrder(params: ValidateOrderParams): Promise<
   };
 }
 
-/**
- * Formats clean payment method names for invoices and customer profile
- */
-export function getPaymentMethodLabel(method: PaymentMethod): string {
-  switch (method) {
-    case "UPI":
-      return "UPI";
-    default:
-      return "UPI";
-
-  }
-}

@@ -19,27 +19,44 @@ export async function POST(req: NextRequest) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       return NextResponse.json(
-        { success: false, error: "Please enter a valid email address." },
+        { success: false, error: "Please enter a valid email address format." },
         { status: 400 }
       );
     }
 
-    // Lookup customer name in Supabase if exists
+    // Verify if account exists in Supabase Auth
     let customerName = "Valued Customer";
     try {
       const supabaseAdmin = getSupabaseAdmin();
-      const { data } = await supabaseAdmin
-        .from("bracelets")
-        .select("customer_name")
+      // Direct email lookup via DB — avoids loading all users into memory
+      const { data: dbUser } = await supabaseAdmin
+        .from("users")
+        .select("id, raw_user_meta_data")
         .eq("email", cleanEmail)
-        .limit(1)
         .maybeSingle();
 
-      if (data?.customer_name) {
-        customerName = data.customer_name;
+      let meta: Record<string, string> | null = null;
+      if (dbUser?.id) {
+        meta = dbUser.raw_user_meta_data;
+      } else {
+        // Fallback: SDK has no getUserByEmail, so scan admin list
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const found = userList?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+        if (!found) {
+          return NextResponse.json(
+            { success: false, error: "No account found with this email address. Please verify your email or sign up." },
+            { status: 404 }
+          );
+        }
+        meta = found.user_metadata;
       }
-    } catch {
-      // Offline fallback
+
+      if (meta) {
+        customerName = meta.full_name || meta.name || customerName;
+      }
+    } catch (lookupErr) {
+      console.warn("[send-otp user lookup notice]:", lookupErr);
+      // Fallback: Proceed if Supabase is temporarily unreachable
     }
 
     // Generate secure 6-digit numeric OTP
@@ -52,6 +69,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error: `Please wait ${storeResult.cooldown}s before requesting another verification code.`,
+          cooldown: storeResult.cooldown,
         },
         { status: 429 }
       );
@@ -76,7 +94,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Verification code sent to your email.",
+      message: `A 6-digit verification code has been sent to ${cleanEmail}.`,
       simulated: sendResult.simulated,
     });
   } catch (error: any) {

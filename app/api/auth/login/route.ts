@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminSessionToken, SESSION_COOKIE_NAME } from "@/lib/authServer";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { createSSRClient } from "@/lib/supabaseServer";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,62 +16,37 @@ export async function POST(req: NextRequest) {
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanPassword = String(password);
 
-    const supabase = getSupabaseAdmin();
+    // 1. Authenticate using the SSR Client (this automatically handles setting browser cookies)
+    const supabase = await createSSRClient();
 
-    // 1. Check if this email is registered as an admin
-    const { data: adminData } = await supabase
-      .from("store_admins")
-      .select("email")
-      .eq("email", cleanEmail)
-      .maybeSingle();
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPassword,
+    });
 
-    if (adminData) {
-      // 2. Authenticate the admin using Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanPassword,
-      });
-
-      if (authError || !authData.user) {
-        return NextResponse.json(
-          { success: false, error: "Incorrect password for administrator account." },
-          { status: 401 }
-        );
-      }
-
-      // Generate cryptographically signed session token
-      const sessionToken = await createAdminSessionToken(cleanEmail);
-
-      const isProduction = process.env.NODE_ENV === "production";
-      const response = NextResponse.json({
-        success: true,
-        user: {
-          id: authData.user.id,
-          email: cleanEmail,
-          name: cleanEmail.split("@")[0],
-          role: "ADMIN",
-        },
-      });
-
-      // Set HTTP-Only, Secure, SameSite session cookie
-      response.cookies.set({
-        name: SESSION_COOKIE_NAME,
-        value: sessionToken,
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-      });
-
-      return response;
+    if (authError || !authData.user) {
+      return NextResponse.json(
+        { success: false, error: authError?.message || "Invalid credentials." },
+        { status: 401 }
+      );
     }
 
-    // If not an admin, return a specific error code so the client can fallback to local user auth
-    return NextResponse.json(
-      { success: false, error: "Not an admin account." },
-      { status: 404 }
-    );
+    // 2. Check if this email is registered as an admin using unified checkIsAdmin
+    const { checkIsAdmin } = await import("@/lib/authServer");
+    const isAdmin = await checkIsAdmin(cleanEmail);
+    const role = isAdmin ? "ADMIN" : "USER";
+    const name = authData.user.user_metadata?.full_name || authData.user.user_metadata?.name || cleanEmail.split("@")[0];
+
+    // Supabase already set the secure HTTP-only cookies for us via the SSR client!
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: authData.user.id,
+        email: cleanEmail,
+        name,
+        role,
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { success: false, error: "Authentication failed." },

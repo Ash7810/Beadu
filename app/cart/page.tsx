@@ -139,7 +139,7 @@ export default function CartPage() {
                                       config: customConfig,
                                     })
                                   );
-                                } catch {}
+                                } catch { }
                                 router.push("/builder?step=2");
                               }
                             }}
@@ -207,9 +207,8 @@ export default function CartPage() {
                                   onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
                                   disabled={isMaxStock}
                                   title={isMaxStock ? `Max available stock (${availableStock}) reached` : "Add one more"}
-                                  className={`text-xs font-bold text-foreground hover:text-primary px-1 transition-transform duration-150 ease-out active:scale-[0.96] ${
-                                    isMaxStock ? "opacity-30 cursor-not-allowed" : ""
-                                  }`}
+                                  className={`text-xs font-bold text-foreground hover:text-primary px-1 transition-transform duration-150 ease-out active:scale-[0.96] ${isMaxStock ? "opacity-30 cursor-not-allowed" : ""
+                                    }`}
                                 >
                                   +
                                 </button>
@@ -230,7 +229,9 @@ export default function CartPage() {
                   <div className="pt-3 border-t border-border/40 space-y-3 bg-muted/20 p-3 rounded-2xl">
                     <label className="flex items-center justify-between text-xs font-semibold text-foreground cursor-pointer">
                       <div className="flex items-center gap-2">
-                        <span className="text-base">🎁</span>
+                        <svg className="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v13m0-13V4a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2zm-8 4h16v3H4v-3zm2 3v6a2 2 0 002 2h8a2 2 0 002-2v-6H6z" />
+                        </svg>
                         <span>Add Gift Wrapping (+₹20 per item)</span>
                       </div>
                       <input
@@ -300,7 +301,7 @@ export default function CartPage() {
               >
                 {user ? "Proceed to Checkout →" : "Checkout as Guest →"}
               </Link>
-              
+
               {!user && (
                 <>
                   <div className="relative my-4">
@@ -311,7 +312,7 @@ export default function CartPage() {
                       <span className="bg-white px-2 text-muted-foreground uppercase tracking-widest font-bold">Want to save your details for next time?</span>
                     </div>
                   </div>
-                  
+
                   <GoogleLoginButton label="Continue with Google" redirectTo="/checkout" />
                 </>
               )}

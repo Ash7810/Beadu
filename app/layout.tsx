@@ -29,6 +29,31 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined') {
+                window.addEventListener('error', function(e) {
+                  var file = String(e.filename || '');
+                  var msg = String(e.message || '');
+                  if (file.indexOf('chrome-extension://') !== -1 || msg.indexOf('M_ID') !== -1) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return true;
+                  }
+                }, true);
+                window.addEventListener('unhandledrejection', function(e) {
+                  var reason = String(e.reason && (e.reason.message || e.reason) || '');
+                  var stack = String(e.reason && e.reason.stack || '');
+                  if (reason.indexOf('M_ID') !== -1 || stack.indexOf('chrome-extension://') !== -1) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                  }
+                }, true);
+              }
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col bg-background text-foreground selection:bg-primary/20">
         {children}

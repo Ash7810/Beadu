@@ -15,23 +15,39 @@ function CallbackContent() {
     const handleAuth = async () => {
       try {
         const supabase = getSupabase();
-        const { data, error } = await supabase.auth.getSession();
+        const code = searchParams.get("code");
+        let session = null;
+
+        // In PKCE flow, exchange authorization code for session
+        if (code) {
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (!exchangeError && exchangeData?.session) {
+            session = exchangeData.session;
+          }
+        }
+
+        // Fallback to active session
+        if (!session) {
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (!sessionError && sessionData?.session) {
+            session = sessionData.session;
+          }
+        }
         
-        if (error || !data.session) {
+        if (!session) {
           setErrorMsg("Failed to establish session. Please try logging in again.");
           setTimeout(() => router.push("/login"), 3000);
           return;
         }
 
-        // Verify with our custom backend and get role/cookie
+        // Verify with our custom backend and get role/cookie securely
         const res = await fetch("/api/auth/oauth-login", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: data.session.user.email,
-            id: data.session.user.id,
-            name: data.session.user.user_metadata?.full_name || data.session.user.user_metadata?.name || "",
-          }),
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+            "x-refresh-token": session.refresh_token
+          },
         });
         const result = await res.json();
 
@@ -43,14 +59,14 @@ function CallbackContent() {
           setErrorMsg("Account sync failed.");
           setTimeout(() => router.push("/login"), 3000);
         }
-      } catch (err) {
+      } catch {
         setErrorMsg("An unexpected error occurred.");
         setTimeout(() => router.push("/login"), 3000);
       }
     };
 
     handleAuth();
-  }, [router, next]);
+  }, [router, next, searchParams]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center font-sans text-center px-4">

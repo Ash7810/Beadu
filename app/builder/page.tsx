@@ -75,7 +75,7 @@ function BuilderContent() {
               merged = [...merged, ...newAdminOnly];
             }
           }
-        } catch (_) {}
+        } catch (_) { }
         setLiveBeads(merged);
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 300));
         await Promise.race([preloadImages(merged), timeoutPromise]);
@@ -94,7 +94,7 @@ function BuilderContent() {
               });
             }
           }
-        } catch (_) {}
+        } catch (_) { }
         setLiveBeads(fallback);
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 300));
         await Promise.race([preloadImages(fallback), timeoutPromise]);
@@ -207,7 +207,7 @@ function BuilderContent() {
               return;
             }
           }
-        } catch {}
+        } catch { }
 
         if (searchParams.get("step") === "2") {
           setCurrentStep(2);
@@ -292,7 +292,7 @@ function BuilderContent() {
       freeSlotLimit: spec.freeSlotLimit,
     });
     setCurrentStep(2);
-     
+
   }, [searchParams, loadDesign]); // beads intentionally excluded — read via ref
 
   const handleSelectBead = (bead: Bead) => {
@@ -457,8 +457,8 @@ function BuilderContent() {
               <button
                 onClick={() => setCurrentStep(1)}
                 className={`px-2 py-1 rounded-full transition-all flex items-center gap-1 min-h-[36px] ${currentStep === 1
-                    ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                  ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card/50"
                   }`}
                 title="Step 1: Select Beads"
               >
@@ -479,10 +479,10 @@ function BuilderContent() {
                 }}
                 disabled={trayBeads.length === 0 && currentStep === 1}
                 className={`px-2 py-1 rounded-full transition-all flex items-center gap-1 min-h-[36px] ${currentStep === 2
-                    ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                    : trayBeads.length === 0
-                      ? "text-muted-foreground/40 cursor-not-allowed"
-                      : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                  ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                  : trayBeads.length === 0
+                    ? "text-muted-foreground/40 cursor-not-allowed"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/50"
                   }`}
                 title={trayBeads.length === 0 ? "Collect at least 1 bead to unlock Step 2." : "Step 2: Design Strand"}
               >
@@ -497,10 +497,10 @@ function BuilderContent() {
                 onClick={() => placedBeads.length > 0 && setCurrentStep(3)}
                 disabled={placedBeads.length === 0 && currentStep !== 3}
                 className={`px-2 py-1 rounded-full transition-all flex items-center gap-1 min-h-[36px] ${currentStep === 3
-                    ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                    : placedBeads.length === 0
-                      ? "text-muted-foreground/40 cursor-not-allowed"
-                      : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                  ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                  : placedBeads.length === 0
+                    ? "text-muted-foreground/40 cursor-not-allowed"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/50"
                   }`}
                 title={placedBeads.length === 0 ? "Add at least 1 bead to continue." : "Step 3: Review & Order"}
               >
@@ -526,8 +526,8 @@ function BuilderContent() {
                 onClick={() => setIsCheckoutOpen(true)}
                 disabled={placedBeads.length === 0}
                 className={`px-3.5 py-2 sm:px-4 sm:py-2 font-medium text-[13px] rounded-full shadow-md transition-all shrink-0 whitespace-nowrap min-h-[40px] flex items-center ${placedBeads.length === 0
-                    ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
-                    : "gold-shimmer text-on-primary-container"
+                  ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
+                  : "gold-shimmer text-on-primary-container"
                   }`}
               >
                 Checkout
@@ -542,11 +542,10 @@ function BuilderContent() {
                   setCurrentStep(2);
                 }}
                 disabled={trayBeads.length === 0}
-                className={`px-3.5 py-2 sm:px-4 sm:py-2 font-medium text-[13px] rounded-full shadow-md transition-all shrink-0 whitespace-nowrap min-h-[40px] flex items-center ${
-                  trayBeads.length === 0
+                className={`px-3.5 py-2 sm:px-4 sm:py-2 font-medium text-[13px] rounded-full shadow-md transition-all shrink-0 whitespace-nowrap min-h-[40px] flex items-center ${trayBeads.length === 0
                     ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
                     : "gold-shimmer text-on-primary-container"
-                }`}
+                  }`}
                 title={trayBeads.length === 0 ? "Collect at least 1 bead to unlock Step 2." : "Proceed to Step 2"}
               >
                 <span>Design</span>
@@ -557,8 +556,8 @@ function BuilderContent() {
                 onClick={() => setCurrentStep(3)}
                 disabled={placedBeads.length === 0}
                 className={`px-3.5 py-2 sm:px-4 sm:py-2 font-medium text-[13px] rounded-full shadow-md transition-all shrink-0 whitespace-nowrap min-h-[40px] flex items-center ${placedBeads.length === 0
-                    ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
-                    : "gold-shimmer text-on-primary-container"
+                  ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
+                  : "gold-shimmer text-on-primary-container"
                   }`}
               >
                 <span>Review</span>
@@ -606,11 +605,10 @@ function BuilderContent() {
                     setCurrentStep(2);
                   }}
                   disabled={trayBeads.length === 0}
-                  className={`px-5 py-2.5 font-bold text-xs rounded-full shadow-md transition-all flex items-center justify-center gap-1 shrink-0 min-h-[40px] ${
-                    trayBeads.length === 0
+                  className={`px-5 py-2.5 font-bold text-xs rounded-full shadow-md transition-all flex items-center justify-center gap-1 shrink-0 min-h-[40px] ${trayBeads.length === 0
                       ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
                       : "gold-shimmer text-on-primary-container active:scale-[0.96] cursor-pointer"
-                  }`}
+                    }`}
                   title={trayBeads.length === 0 ? "Collect at least 1 bead to unlock Step 2." : "Start Designing"}
                 >
                   <span>Start Designing →</span>
@@ -720,11 +718,10 @@ function BuilderContent() {
                 <button
                   onClick={() => placedBeads.length > 0 && setCurrentStep(3)}
                   disabled={placedBeads.length === 0}
-                  className={`px-4 py-2 font-bold text-xs rounded-full transition-all flex items-center gap-1 min-h-[36px] ${
-                    placedBeads.length > 0
+                  className={`px-4 py-2 font-bold text-xs rounded-full transition-all flex items-center gap-1 min-h-[36px] ${placedBeads.length > 0
                       ? "gold-shimmer text-on-primary-container shadow-md cursor-pointer"
                       : "bg-muted text-muted-foreground/50 cursor-not-allowed border border-border/60"
-                  }`}
+                    }`}
                 >
                   <span>Review &amp; Order →</span>
                 </button>
@@ -821,11 +818,10 @@ function BuilderContent() {
                       });
                     }}
                     disabled={placedBeads.length === 0}
-                    className={`w-full font-bold py-3 text-xs sm:text-sm rounded-full shadow-lg transition-all ${
-                      placedBeads.length === 0
+                    className={`w-full font-bold py-3 text-xs sm:text-sm rounded-full shadow-lg transition-all ${placedBeads.length === 0
                         ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
                         : "bg-muted hover:bg-muted/80 text-foreground border border-border"
-                    }`}
+                      }`}
                   >
                     + Add to Cart
                   </button>
@@ -861,11 +857,10 @@ function BuilderContent() {
                       });
                     }}
                     disabled={placedBeads.length === 0}
-                    className={`w-full font-bold py-3 text-xs sm:text-sm rounded-full shadow-lg transition-all ${
-                      placedBeads.length === 0
+                    className={`w-full font-bold py-3 text-xs sm:text-sm rounded-full shadow-lg transition-all ${placedBeads.length === 0
                         ? "bg-muted text-muted-foreground cursor-not-allowed border border-border/60"
                         : "gold-shimmer text-on-primary-container active:scale-[0.96]"
-                    }`}
+                      }`}
                   >
                     Proceed to Checkout →
                   </button>

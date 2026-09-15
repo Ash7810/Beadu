@@ -163,7 +163,7 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
   return (
     <section className="mt-12 sm:mt-16 pt-10 border-t border-stone-200">
       <div className="max-w-4xl mx-auto space-y-8">
-        
+
         {/* Minimal Summary Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-stone-200/80">
           {/* Rating Number & Review Count */}
@@ -201,9 +201,8 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                 <div
                   key={star}
                   onClick={() => setSelectedStarFilter(isSelected ? null : star)}
-                  className={`flex items-center gap-3 text-xs cursor-pointer py-1 px-2 rounded-lg transition-colors ${
-                    isSelected ? "bg-amber-100/70" : "hover:bg-stone-50"
-                  }`}
+                  className={`flex items-center gap-3 text-xs cursor-pointer py-1 px-2 rounded-lg transition-colors ${isSelected ? "bg-amber-100/70" : "hover:bg-stone-50"
+                    }`}
                 >
                   <span className="w-8 text-right font-bold text-stone-700">{star} ★</span>
                   <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
@@ -231,9 +230,8 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                 <button
                   type="button"
                   onClick={() => setOnlyPhotosFilter(!onlyPhotosFilter)}
-                  className={`text-[11px] font-bold ${
-                    onlyPhotosFilter ? "text-[#792c14] underline" : "text-stone-500 hover:text-stone-800"
-                  }`}
+                  className={`text-[11px] font-bold ${onlyPhotosFilter ? "text-[#792c14] underline" : "text-stone-500 hover:text-stone-800"
+                    }`}
                 >
                   {onlyPhotosFilter ? "Show all" : "View with photos"}
                 </button>
@@ -257,18 +255,17 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
         {/* Minimal Filters */}
         <div className="flex items-center gap-2 pt-2 text-xs flex-wrap">
           <span className="text-stone-400 font-bold text-[11px] mr-1">Filter:</span>
-          
+
           <button
             type="button"
             onClick={() => {
               setSelectedStarFilter(null);
               setOnlyPhotosFilter(false);
             }}
-            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-              selectedStarFilter === null && !onlyPhotosFilter
+            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${selectedStarFilter === null && !onlyPhotosFilter
                 ? "bg-stone-900 text-white"
                 : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-            }`}
+              }`}
           >
             All
           </button>
@@ -278,11 +275,10 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
               key={star}
               type="button"
               onClick={() => setSelectedStarFilter(selectedStarFilter === star ? null : star)}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                selectedStarFilter === star
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${selectedStarFilter === star
                   ? "bg-[#792c14] text-white"
                   : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-              }`}
+                }`}
             >
               {star} ★
             </button>
@@ -292,11 +288,10 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
             <button
               type="button"
               onClick={() => setOnlyPhotosFilter(!onlyPhotosFilter)}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                onlyPhotosFilter
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${onlyPhotosFilter
                   ? "bg-[#792c14] text-white"
                   : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-              }`}
+                }`}
             >
               With Photos 📸
             </button>
@@ -380,9 +375,8 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                     <button
                       type="button"
                       onClick={() => handleUpvote(rev.id)}
-                      className={`text-[11px] font-medium transition-colors ${
-                        hasVoted ? "text-emerald-700 font-bold" : "text-stone-500 hover:text-stone-800"
-                      }`}
+                      className={`text-[11px] font-medium transition-colors ${hasVoted ? "text-emerald-700 font-bold" : "text-stone-500 hover:text-stone-800"
+                        }`}
                     >
                       👍 Helpful ({rev.helpfulCount || 0})
                     </button>
@@ -421,9 +415,8 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                         key={star}
                         type="button"
                         onClick={() => setRating(star)}
-                        className={`text-2xl transition-transform hover:scale-110 focus:outline-hidden ${
-                          star <= rating ? "text-amber-500" : "text-stone-200"
-                        }`}
+                        className={`text-2xl transition-transform hover:scale-110 focus:outline-hidden ${star <= rating ? "text-amber-500" : "text-stone-200"
+                          }`}
                       >
                         ★
                       </button>
@@ -432,10 +425,10 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                       {rating === 5
                         ? "Excellent"
                         : rating === 4
-                        ? "Good"
-                        : rating === 3
-                        ? "Average"
-                        : "Needs Improvement"}
+                          ? "Good"
+                          : rating === 3
+                            ? "Average"
+                            : "Needs Improvement"}
                     </span>
                   </div>
                 </div>
@@ -494,7 +487,7 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                 {/* Real Device Camera / File Upload */}
                 <div className="space-y-2 pt-1">
                   <label className="block font-bold text-stone-700">Add Product Photos</label>
-                  
+
                   {/* File Input Target */}
                   <input
                     ref={fileInputRef}
@@ -506,7 +499,7 @@ export function ReviewSection({ productId, productName }: ReviewSectionProps) {
                     className="hidden"
                     id="review-camera-upload"
                   />
-                  
+
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     className="cursor-pointer border-2 border-dashed border-stone-300 hover:border-[#792c14] rounded-2xl p-3.5 flex flex-col items-center justify-center gap-1 transition-colors bg-stone-50/70 hover:bg-stone-50 text-center"

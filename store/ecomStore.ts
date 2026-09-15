@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Product, ReviewItem, MOCK_REVIEWS, PRODUCTS_CATALOG } from '@/lib/ecomData';
-import { useAuthStore } from './authStore';
+import { useAuthStore } from '@/store/authStore';
 
 export interface CartItem {
   product: Product;
@@ -36,10 +36,14 @@ export interface Order {
   shippingFee: number;
   total: number;
   status: 'Order Placed' | 'Order Accepted' | 'Confirmed' | 'Crafting' | 'Dispatched' | 'Shipped' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
-  shippingAddress: Address;
+  fulfillmentStatus?: 'Unfulfilled' | 'Manifested' | 'In Transit' | 'Delivered' | 'Failed' | 'Cancelled';
   paymentMode: string;
+  paymentStatus?: 'Paid' | 'Pending' | 'Refunded';
+  shippingAddress: Address;
   transactionId?: string;
   awbNumber?: string;
+  delhiveryStatus?: string;
+  delhiveryError?: string;
 }
 
 interface ToastMessage {
@@ -92,12 +96,7 @@ interface EcomState {
   removeAddress: (id: string) => void;
   getUserAddresses: (userId?: string) => Address[];
 
-  createOrder: (
-    shippingAddress: Address,
-    paymentMode: string,
-    transactionId: string,
-    userId?: string
-  ) => Order;
+  addServerOrder: (order: Order) => void;
 
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   updateOrderAWB: (orderId: string, awbNumber: string) => void;
@@ -405,9 +404,13 @@ export const useEcomStore = create<EcomState>()(
 
       removeFromCart: (productId) => {
         const target = get().cart.find((item) => item.product.id === productId);
-        set((state) => ({
-          cart: state.cart.filter((item) => item.product.id !== productId),
-        }));
+        set((state) => {
+          const updatedCart = state.cart.filter((item) => item.product.id !== productId);
+          return {
+            cart: updatedCart,
+            userCarts: state.activeUserId ? { ...state.userCarts, [state.activeUserId]: updatedCart } : state.userCarts,
+          };
+        });
         if (target) {
           get().addToast('Removed from Bag', `${target.product.name} removed from your bag.`, 'info');
         }
@@ -426,19 +429,27 @@ export const useEcomStore = create<EcomState>()(
             `Cannot exceed available stock of ${availableStock} units.`,
             'warning'
           );
-          set((state) => ({
-            cart: state.cart.map((item) =>
+          set((state) => {
+            const updatedCart = state.cart.map((item) =>
               item.product.id === productId ? { ...item, quantity: availableStock } : item
-            ),
-          }));
+            );
+            return {
+              cart: updatedCart,
+              userCarts: state.activeUserId ? { ...state.userCarts, [state.activeUserId]: updatedCart } : state.userCarts,
+            };
+          });
           return false;
         }
 
-        set((state) => ({
-          cart: state.cart.map((item) =>
+        set((state) => {
+          const updatedCart = state.cart.map((item) =>
             item.product.id === productId ? { ...item, quantity } : item
-          ),
-        }));
+          );
+          return {
+            cart: updatedCart,
+            userCarts: state.activeUserId ? { ...state.userCarts, [state.activeUserId]: updatedCart } : state.userCarts,
+          };
+        });
         return true;
       },
 
@@ -460,7 +471,18 @@ export const useEcomStore = create<EcomState>()(
       },
 
       clearCart: () => {
-        set({ cart: [] });
+        const activeUid = get().activeUserId;
+        set((state) => ({
+          cart: [],
+          userCarts: activeUid ? { ...state.userCarts, [activeUid]: [] } : state.userCarts,
+        }));
+        if (activeUid && activeUid !== 'guest' && typeof window !== 'undefined') {
+          fetch('/api/cart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: activeUid, items: [] })
+          }).catch(() => {});
+        }
       },
 
       toggleWishlist: (productId) => {
@@ -573,25 +595,12 @@ export const useEcomStore = create<EcomState>()(
         return get().addresses.filter((a) => a.userId === targetUserId);
       },
 
-      createOrder: (shippingAddress, paymentMode, transactionId, customUserId) => {
+      addServerOrder: (order) => {
         const state = get();
-        if (state.cart.length === 0) {
-          throw new Error('Cannot create order with an empty cart.');
-        }
-
-        // Validate available stock for all items
-        for (const item of state.cart) {
-          const availableStock = state.getProductStock(item.product.id);
-          if (item.quantity > availableStock) {
-            const errorMsg = `Insufficient stock for ${item.product.name}. Only ${availableStock} unit(s) available.`;
-            get().addToast('Stock Insufficient', errorMsg, 'warning');
-            throw new Error(errorMsg);
-          }
-        }
-
+        
         // Deduct purchased quantities from productStock
         const updatedStock: Record<string, number> = { ...(state.productStock || INITIAL_STOCK) };
-        for (const item of state.cart) {
+        for (const item of order.items) {
           if (!item.product.id.startsWith('custom-')) {
             const current = updatedStock[item.product.id] !== undefined
               ? updatedStock[item.product.id]
@@ -600,41 +609,23 @@ export const useEcomStore = create<EcomState>()(
           }
         }
 
-        const subtotal = state.getCartSubtotal();
-        const giftWrapFee = state.getGiftWrapTotal();
-        const platformFee = state.getPlatformFee();
-        const grandTotal = state.getGrandTotal();
-
-        const orderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
-        const awbNumber = `DLHV${Math.floor(100000000 + Math.random() * 900000000)}`;
-        const orderUserId = customUserId !== undefined ? customUserId : useAuthStore.getState().user?.id;
-
-        const newOrder: Order = {
-          id: orderId,
-          userId: orderUserId,
-          createdAt: new Date().toISOString(),
-          items: [...state.cart],
-          subtotal,
-          giftWrapFee,
-          platformFee,
-          shippingFee: state.getShippingFee(),
-          total: grandTotal,
-          status: 'Order Placed',
-          shippingAddress,
-          paymentMode,
-          transactionId,
-          awbNumber,
-        };
-
+        const activeUid = state.activeUserId;
         set((s) => ({
-          orders: [newOrder, ...s.orders],
+          orders: [order, ...s.orders],
           cart: [],
           productStock: updatedStock,
+          userCarts: activeUid ? { ...s.userCarts, [activeUid]: [] } : s.userCarts,
         }));
 
-        get().addToast('Order Placed!', `Your order ${orderId} has been successfully placed.`, 'success');
+        if (activeUid && activeUid !== 'guest' && typeof window !== 'undefined') {
+          fetch('/api/cart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: activeUid, items: [] })
+          }).catch(() => {});
+        }
 
-        return newOrder;
+        get().addToast('Order Placed!', `Your order ${order.id} has been successfully placed.`, 'success');
       },
 
       updateOrderStatus: (orderId, status) => {
@@ -722,12 +713,7 @@ export const useEcomStore = create<EcomState>()(
           try {
             localStorage.setItem(name, value);
           } catch {
-            try {
-              localStorage.clear();
-              localStorage.setItem(name, value);
-            } catch {
-              // Ignore storage quota limits gracefully
-            }
+            // Gracefully ignore local storage quota overflow without wiping all user state
           }
         },
         removeItem: (name) => {
@@ -735,54 +721,36 @@ export const useEcomStore = create<EcomState>()(
           localStorage.removeItem(name);
         },
       })),
-      partialize: (state) => ({
-        cart: state.cart.map((item) => {
-          const img = item.product.image;
-          const cleanImg = img && img.length > 500 ? "/beads/pomelli_photoshoot_image_1_1_0726.png" : img;
-          return {
-            ...item,
-            product: {
-              ...item.product,
-              image: cleanImg,
-            },
-          };
-        }),
-        wishlist: state.wishlist,
-        addresses: state.addresses,
-        productStock: state.productStock,
-        orders: state.orders.map((order) => ({
-          ...order,
-          items: order.items.map((item) => {
-            const img = item.product.image;
-            const cleanImg = img && img.length > 500 ? "/beads/pomelli_photoshoot_image_1_1_0726.png" : img;
-            return {
-              ...item,
-              product: {
-                ...item.product,
-                image: cleanImg,
-              },
-            };
-          }),
-        })),
-        activeUserId: state.activeUserId,
-        userWishlists: state.userWishlists,
-        userCarts: Object.fromEntries(
-          Object.entries(state.userCarts).map(([uid, cartItems]) => [
-            uid,
-            cartItems.map((item) => {
-              const img = item.product.image;
-              const cleanImg = img && img.length > 500 ? "/beads/pomelli_photoshoot_image_1_1_0726.png" : img;
-              return {
-                ...item,
-                product: {
-                  ...item.product,
-                  image: cleanImg,
-                },
-              };
-            })
-          ])
-        ),
-      }),
+      partialize: (state) => {
+        const cleanItem = <T extends { product: { image: string } }>(item: T): T => ({
+          ...item,
+          product: {
+            ...item.product,
+            image: item.product.image && item.product.image.length > 500
+              ? "/beads/pomelli_photoshoot_image_1_1_0726.png"
+              : item.product.image,
+          },
+        });
+
+        return {
+          cart: state.cart.map(cleanItem),
+          wishlist: state.wishlist,
+          addresses: state.addresses,
+          productStock: state.productStock,
+          orders: state.orders.map((order) => ({
+            ...order,
+            items: order.items.map(cleanItem),
+          })),
+          activeUserId: state.activeUserId,
+          userWishlists: state.userWishlists,
+          userCarts: Object.fromEntries(
+            Object.entries(state.userCarts).map(([uid, cartItems]) => [
+              uid,
+              cartItems.map(cleanItem),
+            ])
+          ),
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           if (!Array.isArray(state.addresses)) state.addresses = [];

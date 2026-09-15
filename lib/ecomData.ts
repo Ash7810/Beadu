@@ -15,18 +15,10 @@ export interface Product {
   stockQuantity?: number;
   isBestSeller?: boolean;
   isNewArrival?: boolean;
-}
-
-export interface ReviewItem {
-  id: string;
-  userName: string;
-  userAvatar?: string;
-  rating: number;
-  date: string;
-  title: string;
-  comment: string;
-  verifiedPurchase: boolean;
-  productName: string;
+  customBeads?: any[];
+  customConfig?: any;
+  cordType?: string;
+  wristInches?: number;
 }
 
 export const PRODUCT_CATEGORIES = [
@@ -298,17 +290,6 @@ export interface ReviewItem {
   helpfulCount: number;
 }
 
-export const DEFAULT_SENTIMENT_TAGS = [
-  '🌟 Premium Finish',
-  '💎 Real Gemstones',
-  '👌 Perfect Wrist Fit',
-  '🎁 Luxury Gift Box',
-  '⚡ Express Delivery',
-  '🪵 Natural Wood Aroma',
-  '✨ Durable Stretch Cord',
-  '🎨 Handcrafted Clay',
-];
-
 export const MOCK_REVIEWS: ReviewItem[] = [
   {
     id: 'r-1',
@@ -323,7 +304,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     verifiedPurchase: true,
     productName: "Earth & Cat's Eye Harmony Bracelet",
     wristSize: '6.5 inches (Small)',
-    tags: ['🌟 Premium Finish', '💎 Real Gemstones', '👌 Perfect Wrist Fit'],
+    tags: ['Premium Finish', 'Real Gemstones', 'Perfect Wrist Fit'],
     images: ['/beads/pomelli_photoshoot_image_1_1_0726.png', '/beads/pomelli_photoshoot_image_4_5_0809.png'],
     helpfulCount: 28,
   },
@@ -331,7 +312,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     id: 'r-2',
     productId: 'b-earth-cats-eye',
     userName: 'Rohan Mehta',
-    userAvatar: '👨',
+    userAvatar: 'R',
     location: 'Bengaluru, Karnataka',
     rating: 5,
     date: 'July 28, 2026',
@@ -340,7 +321,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     verifiedPurchase: true,
     productName: 'Carved Rosewood & Ebony Sphere Bracelet',
     wristSize: '7.0 inches (Medium)',
-    tags: ['🎁 Luxury Gift Box', '⚡ Express Delivery', '🪵 Natural Wood Aroma'],
+    tags: ['Luxury Gift Box', 'Express Delivery', 'Natural Wood Aroma'],
     images: ['/beads/pomelli_photoshoot-3.png'],
     helpfulCount: 19,
   },
@@ -348,7 +329,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     id: 'r-3',
     productId: 'b-earth-cats-eye',
     userName: 'Priya Iyer',
-    userAvatar: '👩',
+    userAvatar: 'P',
     location: 'Chennai, Tamil Nadu',
     rating: 5,
     date: 'July 22, 2026',
@@ -357,7 +338,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     verifiedPurchase: true,
     productName: 'Hand-Painted Pastel Cubes Strand',
     wristSize: '6.0 inches (Petite)',
-    tags: ['🎨 Handcrafted Clay', '👌 Perfect Wrist Fit', '⚡ Express Delivery'],
+    tags: ['Handcrafted Clay', 'Perfect Wrist Fit', 'Express Delivery'],
     images: ['/beads/pomelli_photoshoot_image_9_16_0726 (1).png'],
     helpfulCount: 14,
   },
@@ -365,7 +346,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     id: 'r-4',
     productId: 'b-earth-cats-eye',
     userName: 'Devansh Kulkarni',
-    userAvatar: '👨',
+    userAvatar: 'D',
     location: 'Pune, Maharashtra',
     rating: 4,
     date: 'July 15, 2026',
@@ -374,7 +355,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     verifiedPurchase: true,
     productName: "Earth & Cat's Eye Harmony Bracelet",
     wristSize: '7.5 inches (Large)',
-    tags: ['✨ Durable Stretch Cord', '🌟 Premium Finish'],
+    tags: ['Durable Stretch Cord', 'Premium Finish'],
     images: ['/beads/newimg.png'],
     helpfulCount: 9,
   },
@@ -382,7 +363,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     id: 'r-5',
     productId: 'b-earth-cats-eye',
     userName: 'Meera Nambiar',
-    userAvatar: '👩',
+    userAvatar: 'M',
     location: 'Kochi, Kerala',
     rating: 5,
     date: 'July 04, 2026',
@@ -391,7 +372,7 @@ export const MOCK_REVIEWS: ReviewItem[] = [
     verifiedPurchase: true,
     productName: "Earth & Cat's Eye Harmony Bracelet",
     wristSize: '6.5 inches (Small)',
-    tags: ['💎 Real Gemstones', '🎁 Luxury Gift Box', '🌟 Premium Finish'],
+    tags: ['Real Gemstones', 'Luxury Gift Box', 'Premium Finish'],
     images: ['/beads/pomelli_photoshoot_image_9_16_0726 (2).png'],
     helpfulCount: 22,
   },

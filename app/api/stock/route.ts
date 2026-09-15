@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PRODUCTS_CATALOG } from "@/lib/ecomData";
-import { getAdminSession } from "@/lib/authServer";
-
-// In-memory central stock registry initialized with official catalog stock counts
-const centralProductStock: Record<string, number> = {};
-
-function getStockRegistry(): Record<string, number> {
-  if (Object.keys(centralProductStock).length === 0) {
-    for (const p of PRODUCTS_CATALOG) {
-      centralProductStock[p.id] = p.stockQuantity ?? 10;
-    }
-  }
-  return centralProductStock;
-}
+import { getStockRegistry } from "@/lib/stockServer";
 
 /**
  * GET /api/stock
@@ -37,25 +24,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const stock = getStockRegistry();
 
-    // 1. Bulk deduction (used during order placement)
-    if (Array.isArray(body.deduct)) {
-      for (const item of body.deduct) {
-        const pId = String(item.productId);
-        const qty = Number(item.quantity) || 1;
-        if (pId && !pId.startsWith("custom-")) {
-          const cur = stock[pId] !== undefined ? stock[pId] : 10;
-          stock[pId] = Math.max(0, cur - qty);
-        }
-      }
-      return NextResponse.json({ success: true, stock });
-    }
+    const { getAuthenticatedAdmin } = await import("@/lib/authServer");
+    const { isAdmin } = await getAuthenticatedAdmin();
 
-    // 2. Admin direct update
-    const session = await getAdminSession();
-    if (!session.valid) {
+    if (!isAdmin) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. Admin authentication required to update stock." },
-        { status: 401 }
+        { status: 403 }
       );
     }
 
@@ -82,3 +57,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+

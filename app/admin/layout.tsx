@@ -50,42 +50,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* Nav Tabs (Desktop) */}
           <nav className="hidden md:flex items-center gap-1 bg-muted/60 p-0.5 rounded-full border border-border/80 text-xs font-medium">
-            <a
+            <Link
               href="/admin"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
               Dashboard
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/orders"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
               Orders
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/beads"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
               Products &amp; Beads
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/logistics"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
-              🚚 Logistics &amp; Express Tracking
-            </a>
-            <a
+              Logistics &amp; Express Tracking
+            </Link>
+            <Link
               href="/admin/payments"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
-              💳 Payment Terminal
-            </a>
-            <a
+              Payment Terminal
+            </Link>
+            <Link
               href="/admin/reviews"
               className="px-3 py-1.5 rounded-full transition-all hover:bg-card hover:text-foreground text-muted-foreground"
             >
-              ⭐ Reviews
-            </a>
+              Reviews
+            </Link>
           </nav>
 
           <div className="flex items-center gap-4">
@@ -108,24 +108,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Mobile Admin Nav Strip */}
         <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar px-4 py-2 bg-muted/30 border-t border-border/40 text-[11px] font-medium">
-          <a href="/admin" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+          <Link href="/admin" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
             Overview
-          </a>
-          <a href="/admin/orders" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+          </Link>
+          <Link href="/admin/orders" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
             Orders
-          </a>
-          <a href="/admin/beads" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+          </Link>
+          <Link href="/admin/beads" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
             Products
-          </a>
-          <a href="/admin/logistics" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
-            🚚 Logistics
-          </a>
-          <a href="/admin/payments" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
-            💳 Payments
-          </a>
-          <a href="/admin/reviews" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
-            ⭐ Reviews
-          </a>
+          </Link>
+          <Link href="/admin/logistics" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+            Logistics
+          </Link>
+          <Link href="/admin/payments" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+            Payments
+          </Link>
+          <Link href="/admin/reviews" className="px-2.5 py-1 rounded-full bg-card border border-border shrink-0 text-foreground">
+            Reviews
+          </Link>
         </div>
       </div>
 

@@ -95,11 +95,10 @@ function CatalogContent() {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-2.5 rounded-full text-xs font-semibold whitespace-nowrap snap-start transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] min-h-[38px] flex items-center justify-center ${
-                selectedCategory.toLowerCase() === cat.toLowerCase()
+              className={`px-4 py-2.5 rounded-full text-xs font-semibold whitespace-nowrap snap-start transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.96] min-h-[38px] flex items-center justify-center ${selectedCategory.toLowerCase() === cat.toLowerCase()
                   ? "bg-primary text-white shadow-sm"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
+                }`}
             >
               {cat}
             </button>
@@ -270,9 +269,8 @@ function CatalogContent() {
                           aria-label="Wishlist"
                         >
                           <svg
-                            className={`w-4 h-4 transition-all duration-300 ${
-                              isFav ? "text-red-500 fill-red-500 stroke-red-500 scale-110" : "text-slate-400 fill-none stroke-current"
-                            }`}
+                            className={`w-4 h-4 transition-all duration-300 ${isFav ? "text-red-500 fill-red-500 stroke-red-500 scale-110" : "text-slate-400 fill-none stroke-current"
+                              }`}
                             viewBox="0 0 24 24"
                             strokeWidth="1.75"
                             strokeLinecap="round"
@@ -342,9 +340,8 @@ function CatalogContent() {
                                 onClick={() => updateQuantity(product.id, cartItem.quantity + 1)}
                                 disabled={isMaxInCart}
                                 title={isMaxInCart ? `Max stock (${stock}) reached` : "Add one more"}
-                                className={`w-5 h-5 flex items-center justify-center font-bold text-[#792c14] hover:bg-orange-50 rounded-full text-xs active:scale-[0.96] transition-colors duration-150 ease-out ${
-                                  isMaxInCart ? "opacity-30 cursor-not-allowed" : ""
-                                }`}
+                                className={`w-5 h-5 flex items-center justify-center font-bold text-[#792c14] hover:bg-orange-50 rounded-full text-xs active:scale-[0.96] transition-colors duration-150 ease-out ${isMaxInCart ? "opacity-30 cursor-not-allowed" : ""
+                                  }`}
                               >
                                 +
                               </button>

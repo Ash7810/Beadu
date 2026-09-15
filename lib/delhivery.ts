@@ -352,28 +352,15 @@ export async function fetchLiveDelhiveryTrackingAPI(awbNumber: string): Promise<
   }
 }
 
+const VALID_STATUSES = ['Cancelled', 'Delivered', 'Shipped', 'Order Accepted', 'Order Placed'] as const;
+
 export function getLiveDelhiveryStatus(
-  createdAt: string,
-  manualStatus?: 'Order Placed' | 'Order Accepted' | 'Shipped' | 'Delivered' | 'Cancelled' | string
+  _createdAt?: string,
+  manualStatus?: string
 ): 'Order Placed' | 'Order Accepted' | 'Shipped' | 'Delivered' | 'Cancelled' {
-  if (manualStatus === 'Cancelled') return 'Cancelled';
-  if (manualStatus === 'Delivered') return 'Delivered';
-  if (manualStatus === 'Shipped') return 'Shipped';
-  if (manualStatus === 'Order Accepted') return 'Order Accepted';
-
-  const createdTime = new Date(createdAt).getTime();
-  const now = Date.now();
-  const diffMinutes = (now - createdTime) / (1000 * 60);
-
-  if (diffMinutes < 2) {
-    return 'Order Placed';
-  } else if (diffMinutes < 10) {
-    return 'Order Accepted';
-  } else if (diffMinutes < 60) {
-    return 'Shipped';
-  } else {
-    return 'Delivered';
-  }
+  return VALID_STATUSES.includes(manualStatus as any)
+    ? (manualStatus as (typeof VALID_STATUSES)[number])
+    : 'Order Placed';
 }
 
 export function generateDelhiveryTracking(
@@ -382,7 +369,8 @@ export function generateDelhiveryTracking(
   awbNumber?: string,
   orderStatus?: string
 ): DelhiveryTrackingInfo {
-  const awb = awbNumber || `DLHV${Math.floor(100000000 + Math.random() * 900000000)}`;
+  const isRealAwb = Boolean(awbNumber && !awbNumber.startsWith('DLHV') && awbNumber.trim().length > 0);
+  const awb = isRealAwb ? awbNumber : undefined;
   const baseDate = createdAt ? new Date(createdAt) : new Date();
   const liveStatus = (orderStatus as 'Order Placed' | 'Order Accepted' | 'Shipped' | 'Delivered' | 'Cancelled') || getLiveDelhiveryStatus(baseDate.toISOString(), orderStatus);
 
@@ -395,18 +383,22 @@ export function generateDelhiveryTracking(
 
   const isCancelled = liveStatus === 'Cancelled';
   const isAccepted = !isCancelled && liveStatus !== 'Order Placed';
-  const isShipped = !isCancelled && (liveStatus === 'Shipped' || liveStatus === 'Delivered');
-  const isDelivered = !isCancelled && liveStatus === 'Delivered';
+  const isShipped = liveStatus === 'Shipped' || liveStatus === 'Delivered';
+  const isDelivered = liveStatus === 'Delivered';
 
   return {
-    awbNumber: awb,
+    awbNumber: awb || 'Pending Courier Dispatch',
     orderId,
     currentStatus: liveStatus,
-    estimatedDeliveryDate: isCancelled ? 'Shipment Cancelled' : estDate.toLocaleDateString('en-IN', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    }),
+    estimatedDeliveryDate: isCancelled
+      ? 'Shipment Cancelled'
+      : isShipped
+      ? estDate.toLocaleDateString('en-IN', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
+      : 'Estimated 3 - 5 business days from dispatch',
     origin: 'Jaipur Crafts Hub, Rajasthan',
     destination: 'Customer Shipping Address',
     steps: [
@@ -414,42 +406,54 @@ export function generateDelhiveryTracking(
         status: 'Order Placed',
         location: 'www.beadu.in Store',
         timestamp: step1Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        description: isCancelled ? 'Order was cancelled' : 'Order confirmed and packaged for dispatch',
+        description: isCancelled ? 'Order was cancelled' : 'Order placed and confirmed.',
         completed: !isCancelled,
       },
       {
         status: 'Order Accepted',
-        location: 'Jaipur Artisan Studio',
-        timestamp: step2Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        description: 'Handcrafted items packaged in signature gift box',
+        location: 'Jaipur Crafts Hub',
+        timestamp: isAccepted
+          ? step2Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'Preparing for dispatch',
+        description: isAccepted
+          ? `Order accepted and packaging in progress. Tracking ID: ${awb || 'Assigned'}`
+          : 'Order confirmed and queued for dispatch preparation.',
         completed: isAccepted,
       },
       {
         status: 'Picked Up',
-        location: 'Central Sorting Facility - Jaipur',
-        timestamp: step3Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        description: 'Shipment received by Express Logistics Hub',
+        location: 'Jaipur Logistics Hub',
+        timestamp: isShipped
+          ? step3Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'Pending courier handover',
+        description: isShipped
+          ? `Package collected and scanned at origin logistics hub. Tracking ID: ${awb}`
+          : 'Will be handed over to courier partner once packaging is complete.',
         completed: isShipped,
       },
       {
         status: 'In Transit',
         location: 'National Transport Network',
-        timestamp: step4Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        description: 'Shipment in transit via Express Logistics Network',
+        timestamp: isShipped
+          ? step4Time.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'Pending dispatch',
+        description: isShipped
+          ? 'Shipment in transit through express logistics network.'
+          : 'In-transit tracking will begin after pickup scan.',
         completed: isShipped,
       },
       {
         status: 'Out for Delivery',
         location: 'Local Delivery Hub',
-        timestamp: isDelivered ? 'Completed' : (isShipped ? 'Assigned' : 'Pending dispatch'),
+        timestamp: isDelivered ? 'Completed' : isShipped ? 'Assigned' : 'Pending dispatch',
         description: 'Delivery executive assigned for doorstep delivery',
         completed: isDelivered,
       },
       {
         status: 'Delivered',
         location: 'Destination Address',
-        timestamp: isDelivered ? 'Delivered' : (isCancelled ? 'Cancelled' : 'Expected in 1-2 days'),
-        description: isCancelled ? 'Delivery was cancelled' : 'Package handed over to recipient',
+        timestamp: isDelivered ? 'Delivered' : isCancelled ? 'Cancelled' : 'Expected upon courier arrival',
+        description: isCancelled ? 'Delivery was cancelled' : isDelivered ? 'Package handed over to recipient' : 'Doorstep delivery pending',
         completed: isDelivered,
       },
     ],
@@ -520,7 +524,7 @@ export async function createDelhiveryShipment(order: {
 }): Promise<CreateShipmentResult> {
   const apiKey = process.env.DELHIVERY_API_KEY;
   const baseUrl = process.env.DELHIVERY_API_URL || 'https://track.delhivery.com';
-  const pickupLocation = process.env.DELHIVERY_PICKUP_LOCATION || 'Beadu Warehouse';
+  const pickupLocation = process.env.DELHIVERY_PICKUP_LOCATION || 'Beadu Retail';
 
   const weightGrams = calculateOrderWeight(order.items);
   const cleanPhone = order.shippingAddress.phone.replace(/\D/g, '').slice(-10);
@@ -533,6 +537,8 @@ export async function createDelhiveryShipment(order: {
   const quantity = String(order.items?.reduce((sum, i) => sum + i.quantity, 0) || 1);
   // Order date in YYYY-MM-DD format as required by Delhivery
   const orderDate = new Date().toISOString().split('T')[0];
+
+  const isCod = order.paymentMode === 'COD';
 
   // If live credentials configured, dispatch real shipment creation to Delhivery
   if (apiKey) {
@@ -548,8 +554,8 @@ export async function createDelhiveryShipment(order: {
             country: 'India',
             phone: cleanPhone,
             order: order.id,
-            payment_mode: 'Prepaid',
-            cod_amount: '0',
+            payment_mode: isCod ? 'COD' : 'Prepaid',
+            cod_amount: isCod ? String(Math.round(order.total)) : '0',
             total_amount: String(Math.round(order.total)),
             products_desc: productDescription,
             hsn_code: '7117',
@@ -561,14 +567,14 @@ export async function createDelhiveryShipment(order: {
             shipment_length: '10',
             shipping_mode: 'Surface',
             address_type: order.shippingAddress.addressType === 'WORK' ? 'office' : 'home',
-            seller_name: sanitizeDelhiveryText(process.env.DELHIVERY_SELLER_NAME || 'Beadu Atelier'),
-            seller_add: sanitizeDelhiveryText(process.env.DELHIVERY_SELLER_ADDRESS || 'Vasai, Palghar, Maharashtra - 401305'),
+            seller_name: sanitizeDelhiveryText(process.env.DELHIVERY_SELLER_NAME || 'Beadu Retail'),
+            seller_add: sanitizeDelhiveryText(process.env.DELHIVERY_SELLER_ADDRESS || 'Shree Choice, Shop No. 17, Devraj CHSL, S.V. Road, Topiwala Marg, Mumbai, Maharashtra'),
             seller_inv: order.id,
-            return_pin: process.env.DELHIVERY_ORIGIN_PIN || '401305',
-            return_city: sanitizeDelhiveryText(process.env.DELHIVERY_RETURN_CITY || 'Vasai'),
+            return_pin: process.env.DELHIVERY_ORIGIN_PIN || '400104',
+            return_city: sanitizeDelhiveryText(process.env.DELHIVERY_RETURN_CITY || 'Mumbai'),
             return_state: sanitizeDelhiveryText(process.env.DELHIVERY_RETURN_STATE || 'Maharashtra'),
             return_country: 'India',
-            return_add: sanitizeDelhiveryText(process.env.DELHIVERY_RETURN_ADDRESS || 'Beadu Atelier Hub, Vasai, Maharashtra'),
+            return_add: sanitizeDelhiveryText(process.env.DELHIVERY_RETURN_ADDRESS || 'Shree Choice, Shop No. 17, Devraj CHSL, S.V. Road, Topiwala Marg, Mumbai, Maharashtra'),
             return_phone: sellerPhone,
             fragile_shipment: false,
             dangerous_good: false,
@@ -604,20 +610,52 @@ export async function createDelhiveryShipment(order: {
             pickupLocation,
             sortCode: pkg.sort_code,
           };
+        } else if (pkg && (pkg.status === 'Fail' || !pkg.waybill)) {
+          const rawErr = (pkg.remarks && pkg.remarks.length > 0)
+            ? pkg.remarks.join(' ')
+            : (data.rmk || 'Delhivery shipment creation was not accepted.');
+          let friendlyMsg = rawErr;
+          if (rawErr.toLowerCase().includes('insufficient balance')) {
+            friendlyMsg = 'Delhivery Wallet Insufficient Balance: Your Delhivery One account has insufficient prepaid wallet balance to manifest this shipment. Please recharge your Delhivery One prepaid wallet.';
+          } else if (rawErr.toLowerCase().includes('suspicious order')) {
+            friendlyMsg = 'Delhivery Flagged Consignee: Test/placeholder customer name, repeated phone number, or identical shipping/seller address was flagged as suspicious by Delhivery fraud filter.';
+          }
+          console.warn('[Delhivery Manifest Failed]:', friendlyMsg);
+          return {
+            success: false,
+            error: friendlyMsg,
+            waybill: '',
+            orderId: order.id,
+            pickupLocation,
+          };
         }
       }
       const errText = await res.text().catch(() => '');
       console.warn('Delhivery manifest response non-OK:', res.status, errText);
-    } catch (err) {
-      console.warn('Delhivery manifest network error, falling back to simulated AWB:', err);
+      return {
+        success: false,
+        error: `Delhivery API returned HTTP ${res.status}: ${errText.slice(0, 150)}`,
+        waybill: '',
+        orderId: order.id,
+        pickupLocation,
+      };
+    } catch (err: any) {
+      console.warn('Delhivery manifest network error:', err);
+      return {
+        success: false,
+        error: err?.message || 'Network error connecting to Delhivery API',
+        waybill: '',
+        orderId: order.id,
+        pickupLocation,
+      };
     }
   }
 
-  // Development / Simulation Fallback
-  const fallbackWaybill = `DLHV${Math.floor(100000000 + Math.random() * 900000000)}`;
+  // When NO API Key is configured, return clear unconfigured notice without generating fake DLHV waybills
   return {
-    success: true,
-    waybill: fallbackWaybill,
+    success: false,
+    error: 'Delhivery courier API token is not configured.',
+    waybill: '',
     orderId: order.id,
     pickupLocation,
     simulated: true,

@@ -478,8 +478,8 @@ function ClearStrandButton({ onClearStrand }: { onClearStrand: () => void }) {
       ref={setNodeRef}
       onClick={handleClick}
       className={`w-8 h-8 rounded-full border transition-all shadow-xs flex items-center justify-center ms-2 ${isOver
-          ? "bg-destructive text-white border-destructive scale-125 ring-4 ring-destructive/30"
-          : "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20 hover:border-destructive/60"
+        ? "bg-destructive text-white border-destructive scale-125 ring-4 ring-destructive/30"
+        : "bg-destructive/10 border-destructive/30 text-destructive hover:bg-destructive/20 hover:border-destructive/60"
         }`}
       title="Clear strand or drag bead here to delete"
     >
@@ -668,10 +668,10 @@ export function BraceletCanvas({
               <div className="flex-1 sm:w-16 h-2 rounded-full bg-muted/90 overflow-hidden border border-border/70 max-w-[120px] sm:max-w-none">
                 <div
                   className={`h-full transition-all duration-300 ${physCap.percentUsed >= 100 || physCap.isFull
-                      ? "bg-destructive"
-                      : physCap.percentUsed >= 80
-                        ? "bg-amber-600"
-                        : "bg-primary"
+                    ? "bg-destructive"
+                    : physCap.percentUsed >= 80
+                      ? "bg-amber-600"
+                      : "bg-primary"
                     }`}
                   style={{
                     width: physCap.usedMm > 0 ? `${Math.max(8, physCap.percentUsed)}%` : "0%",

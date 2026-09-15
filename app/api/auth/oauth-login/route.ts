@@ -1,63 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminSessionToken, SESSION_COOKIE_NAME } from "@/lib/authServer";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { createSSRClient } from "@/lib/supabaseServer";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { email, id, name } = body;
-
-    if (!email || !id) {
-      return NextResponse.json({ success: false }, { status: 400 });
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ success: false, error: "Missing token" }, { status: 401 });
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
-    const fallbackName = cleanEmail.split("@")[0];
-    const finalName = name && String(name).trim() ? String(name).trim() : fallbackName;
-    const supabase = getSupabaseAdmin();
+    const token = authHeader.split(" ")[1];
 
-    // Check if this email is an admin
-    const { data: adminData } = await supabase
-      .from("store_admins")
-      .select("email")
-      .eq("email", cleanEmail)
-      .maybeSingle();
+    // Check if client sent refresh token in headers or body to properly set session
+    const refreshToken = req.headers.get("x-refresh-token") || "";
 
-    if (adminData) {
-      // Generate cryptographically signed session token for admin
-      const sessionToken = await createAdminSessionToken(cleanEmail);
-      const isProduction = process.env.NODE_ENV === "production";
-      const response = NextResponse.json({
-        success: true,
-        user: {
-          id: id,
-          email: cleanEmail,
-          name: finalName,
-          role: "ADMIN",
-        },
+    const supabase = await createSSRClient();
+
+    let user;
+
+    if (refreshToken) {
+      // Set the session using both tokens, this will automatically set the secure cookies via SSR client
+      const { data, error } = await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: refreshToken,
       });
-
-      response.cookies.set({
-        name: SESSION_COOKIE_NAME,
-        value: sessionToken,
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-      });
-
-      return response;
+      if (error || !data.user) {
+        return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 });
+      }
+      user = data.user;
+    } else {
+      // Securely verify the token
+      const { data, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !data.user) {
+        return NextResponse.json({ success: false, error: "Invalid token" }, { status: 401 });
+      }
+      user = data.user;
     }
 
-    // Standard user
+    if (!user.email) {
+      return NextResponse.json({ success: false, error: "User email not found" }, { status: 400 });
+    }
+
+    const cleanEmail = String(user.email).trim().toLowerCase();
+    const name = user.user_metadata?.full_name || user.user_metadata?.name || cleanEmail.split("@")[0];
+
+    // Check if this email is an admin using unified checkIsAdmin
+    const { checkIsAdmin } = await import("@/lib/authServer");
+    const isAdmin = await checkIsAdmin(cleanEmail);
+    const role = isAdmin ? "ADMIN" : "USER";
+
     return NextResponse.json({
       success: true,
       user: {
-        id: id,
+        id: user.id,
         email: cleanEmail,
-        name: finalName,
-        role: "USER",
+        name: name,
+        role,
       },
     });
   } catch (error) {

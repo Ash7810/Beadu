@@ -76,7 +76,8 @@ A high-performance, mobile-first E-Commerce web application custom-built for **w
 - **Integrations**: 
   - SME Pay payment gateway (`lib/smePay.ts`)
   - Delhivery One logistics (`lib/delhivery.ts`)
-  - Supabase database / authentication backend
+  - Supabase database & authentication backend (Schema: [`sql.md`](./sql.md))
+  - Resend transactional email API (`lib/resend.ts`)
   - Cloudinary for image delivery
 - **Builder Graphics**: Konva & React-Konva (`react-konva`)
 

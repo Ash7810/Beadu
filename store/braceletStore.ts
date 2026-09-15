@@ -1,6 +1,9 @@
 import { create } from "zustand";
-import { Bead, PlacedBead, BraceletConfig, PricingResult, CordType, DEFAULT_WRIST_SIZE_MM } from "@/lib/types";
+import { Bead, PlacedBead, BraceletConfig, PricingResult, DEFAULT_WRIST_SIZE_MM } from "@/lib/types";
 import { calculateTotal, getStrandSpecFromWrist, calculateStrandPhysicalCapacity } from "@/lib/pricing";
+
+const getBeadWidth = (b: { widthMm?: number; sizeMm?: number; size?: number }) =>
+  b.widthMm || b.sizeMm || Math.round(8 * (b.size || 1));
 
 type BraceletState = {
   config: BraceletConfig;
@@ -21,7 +24,6 @@ type BraceletState = {
   duplicateBead: (placedId: string) => void;
   rotateBead: (placedId: string, rotation: number) => void;
   setWristInches: (wristInches: number) => void;
-  setCordType: (cordType: CordType) => void;
   setWristSizeLocked: (locked: boolean) => void;
   startNewCustomer: () => void;
   undo: () => void;
@@ -43,6 +45,10 @@ const DEFAULT_CONFIG: BraceletConfig = {
   wristSizeLocked: false,
 };
 
+export function getBeadWidthMm(b: { widthMm?: number; sizeMm?: number; size?: number }): number {
+  return b.widthMm || b.sizeMm || Math.round(8 * (b.size || 1));
+}
+
 function pushHistory(state: BraceletState, next: PlacedBead[], newConfig?: BraceletConfig) {
   const config = newConfig || state.config;
   const trimmed = state.history.slice(0, state.historyIndex + 1);
@@ -50,7 +56,7 @@ function pushHistory(state: BraceletState, next: PlacedBead[], newConfig?: Brace
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem("beadu_live_bracelet", JSON.stringify({ placedBeads: next, config }));
-    } catch {}
+    } catch { }
   }
   return {
     config,
@@ -74,10 +80,10 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
   addBead: (bead, slotIndex) => {
     const state = get();
     const physCap = calculateStrandPhysicalCapacity(state.placedBeads, state.config);
-    const widthMm = bead.widthMm || bead.sizeMm || Math.round(8 * (bead.size || 1));
+    const widthMm = getBeadWidth(bead);
 
     const filtered = state.placedBeads.filter((b) => b.slotIndex !== slotIndex);
-    const usedAfterFilter = filtered.reduce((acc, b) => acc + (b.widthMm || b.sizeMm || Math.round(8 * (b.size || 1))), 0);
+    const usedAfterFilter = filtered.reduce((acc, b) => acc + getBeadWidth(b), 0);
     const fits = usedAfterFilter + widthMm <= physCap.capacityMm;
 
     if (!fits) {
@@ -102,11 +108,11 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     if (!target) return false;
 
     const physCap = calculateStrandPhysicalCapacity(state.placedBeads, state.config);
-    const newWidthMm = newBead.widthMm || newBead.sizeMm || Math.round(8 * (newBead.size || 1));
+    const newWidthMm = getBeadWidth(newBead);
 
     // Exclude target bead from capacity calculation
     const remainingBeads = state.placedBeads.filter((b) => b.placedId !== placedId);
-    const usedAfterFilter = remainingBeads.reduce((acc, b) => acc + (b.widthMm || b.sizeMm || Math.round(8 * (b.size || 1))), 0);
+    const usedAfterFilter = remainingBeads.reduce((acc, b) => acc + getBeadWidth(b), 0);
     const fits = usedAfterFilter + newWidthMm <= physCap.capacityMm;
 
     if (!fits) {
@@ -178,7 +184,7 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     const original = state.placedBeads.find((b) => b.placedId === placedId);
     if (!original) return;
     const physCap = calculateStrandPhysicalCapacity(state.placedBeads, state.config);
-    const beadMm = original.widthMm || original.sizeMm || Math.round(8 * (original.size || 1));
+    const beadMm = getBeadWidth(original);
     if (physCap.usedMm + beadMm > physCap.capacityMm) return;
 
     const openSlot = findNextOpenSlot(state.placedBeads, state.config.totalSlots);
@@ -219,7 +225,7 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     let usedMm = 0;
     const fittingBeads: typeof filteredBeads = [];
     for (const bead of sortedBySlot) {
-      const w = bead.widthMm || bead.sizeMm || Math.round(8 * (bead.size || 1));
+      const w = getBeadWidth(bead);
       if (usedMm + w <= newCapacityMm) {
         usedMm += w;
         fittingBeads.push(bead);
@@ -230,17 +236,6 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     set({
       ...pushHistory(state, reindexedBeads, newConfig),
       wristSizeMm: spec.capacityMm,
-    });
-  },
-
-  setCordType: (cordType: CordType) => {
-    const state = get();
-    const newConfig: BraceletConfig = {
-      ...state.config,
-      cordType,
-    };
-    set({
-      ...pushHistory(state, state.placedBeads, newConfig),
     });
   },
 
@@ -255,7 +250,7 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem("beadu_live_bracelet");
-      } catch {}
+      } catch { }
     }
     set({
       config: DEFAULT_CONFIG,
@@ -293,23 +288,7 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
     });
   },
 
-  reset: () => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem("beadu_live_bracelet");
-      } catch {}
-    }
-    set({
-      config: DEFAULT_CONFIG,
-      placedBeads: [],
-      history: [[]],
-      historyIndex: 0,
-      wristSizeMm: DEFAULT_WRIST_SIZE_MM,
-      wristSizeLocked: false,
-      lastError: null,
-      pricing: calculateTotal([], DEFAULT_CONFIG),
-    });
-  },
+  reset: () => get().startNewCustomer(),
 
   loadDesign: (beads, customConfig) => {
     const state = get();
@@ -382,7 +361,7 @@ export const useBraceletStore = create<BraceletState>((set, get) => ({
 
     for (let slotIndex = 0; slotIndex < totalSlots; slotIndex++) {
       const randomBead = availableBeads[Math.floor(Math.random() * availableBeads.length)];
-      const widthMm = randomBead.widthMm || randomBead.sizeMm || Math.round(8 * (randomBead.size || 1));
+      const widthMm = getBeadWidth(randomBead);
 
       if (currentWidthSum + widthMm > physCap.capacityMm) break;
 

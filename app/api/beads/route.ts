@@ -58,3 +58,60 @@ export async function GET() {
 
   return NextResponse.json(INITIAL_BEADS);
 }
+
+/**
+ * POST /api/beads
+ * Admin creates or updates beads in the Supabase catalog.
+ */
+export async function POST(req: Request) {
+  try {
+    const { getAuthenticatedAdmin } = await import("@/lib/authServer");
+    const { isAdmin } = await getAuthenticatedAdmin();
+
+    if (!isAdmin) {
+      return NextResponse.json({ success: false, error: "Admin authorization required." }, { status: 403 });
+    }
+
+    const { getSupabaseAdmin } = await import("@/lib/supabase");
+    const adminDb = getSupabaseAdmin();
+
+    const body = await req.json();
+    const { id, name, category, price, material, imageUrl, isPremium, rotationAllowed, rotation, size, sizeMm, widthMm, active } = body;
+
+    if (!id || !name) {
+      return NextResponse.json({ success: false, error: "Bead id and name are required." }, { status: 400 });
+    }
+
+    const row = {
+      id: String(id),
+      name: String(name),
+      category: String(category || "acrylic"),
+      price: Number(price) || 0,
+      material: String(material || ""),
+      image_url: String(imageUrl || ""),
+      is_premium: Boolean(isPremium),
+      rotation_allowed: Boolean(rotationAllowed),
+      rotation: Number(rotation) || 0,
+      size: Number(size) || 1.0,
+      size_mm: Number(sizeMm) || 8.0,
+      width_mm: Number(widthMm) || 8.0,
+      active: active !== undefined ? Boolean(active) : true,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await adminDb
+      .from("beads")
+      .upsert(row, { onConflict: "id" })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, bead: data });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || "Failed to save bead." }, { status: 500 });
+  }
+}
+

@@ -28,24 +28,24 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
 
   const product = isCustom
     ? {
-        id,
-        name: "Bespoke Custom Handcrafted Bracelet",
-        price: 499,
-        originalPrice: 699,
-        rating: 5.0,
-        reviewsCount: 1,
-        category: "Custom Builder" as const,
-        material: "Wooden Beads" as const,
-        image: "/beads/pomelli_photoshoot_image_1_1_0726.png",
-        images: ["/beads/pomelli_photoshoot_image_1_1_0726.png"],
-        description: "Custom artisan bracelet created in the Beadu digital customizer studio.",
-        details: [
-          "Custom bead strand combination",
-          "Hand-finished in signature velvet box",
-          "Free Express Insured Shipping across India",
-        ],
-        inStock: true,
-      }
+      id,
+      name: "Bespoke Custom Handcrafted Bracelet",
+      price: 499,
+      originalPrice: 699,
+      rating: 5.0,
+      reviewsCount: 1,
+      category: "Custom Builder" as const,
+      material: "Wooden Beads" as const,
+      image: "/beads/pomelli_photoshoot_image_1_1_0726.png",
+      images: ["/beads/pomelli_photoshoot_image_1_1_0726.png"],
+      description: "Custom artisan bracelet created in the Beadu digital customizer studio.",
+      details: [
+        "Custom bead strand combination",
+        "Hand-finished in signature velvet box",
+        "Free Express Insured Shipping across India",
+      ],
+      inStock: true,
+    }
     : foundProduct!;
 
   const [selectedImage, setSelectedImage] = useState<string>(product.image);
@@ -109,9 +109,8 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 aria-label="Wishlist"
               >
                 <svg
-                  className={`w-5 h-5 transition-[color,fill] duration-300 ${
-                    isFav ? "text-red-500 fill-red-500" : "text-gray-400 fill-none"
-                  }`}
+                  className={`w-5 h-5 transition-[color,fill] duration-300 ${isFav ? "text-red-500 fill-red-500" : "text-gray-400 fill-none"
+                    }`}
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                   strokeWidth="1.5"
@@ -158,11 +157,10 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                       <button
                         key={idx}
                         onClick={() => setSelectedImage(imgUrl)}
-                        className={`rounded-full transition-all duration-300 ${
-                          selectedImage === imgUrl
+                        className={`rounded-full transition-all duration-300 ${selectedImage === imgUrl
                             ? "w-4 h-1.5 bg-white shadow-xs"
                             : "w-1.5 h-1.5 bg-white/60 hover:bg-white"
-                        }`}
+                          }`}
                         aria-label={`View image ${idx + 1}`}
                       />
                     ))}
@@ -183,11 +181,10 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                   <button
                     key={idx}
                     onClick={() => setSelectedImage(imgUrl)}
-                    className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden shrink-0 snap-start border-2 ring-1 ring-black/10 transition-[transform,border-color,opacity,box-shadow] duration-150 ease-out active:scale-[0.96] ${
-                      selectedImage === imgUrl
+                    className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden shrink-0 snap-start border-2 ring-1 ring-black/10 transition-[transform,border-color,opacity,box-shadow] duration-150 ease-out active:scale-[0.96] ${selectedImage === imgUrl
                         ? "border-primary ring-2 ring-primary/20 scale-95 shadow-md"
                         : "border-border/40 opacity-70 hover:opacity-100 hover:border-border"
-                    }`}
+                      }`}
                   >
                     <Image src={imgUrl} alt={`${product.name} view ${idx + 1}`} fill sizes="80px" className="object-cover" />
                   </button>
@@ -241,7 +238,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                 ) : isLowStock ? (
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span>⚡ Only {currentStock} left in stock - order soon!</span>
+                    <span>Only {currentStock} left in stock - order soon!</span>
                   </div>
                 ) : (
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -312,7 +309,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                             +
                           </button>
                         </div>
-                        <Link 
+                        <Link
                           href="/cart"
                           className="flex-1 w-full bg-[#7c2d12] hover:bg-[#9a3412] text-white text-sm font-bold uppercase tracking-wider h-[3.5rem] rounded-2xl shadow-md transition-[transform,background-color] duration-150 ease-out active:scale-[0.96] flex items-center justify-center gap-2"
                         >
@@ -351,7 +348,12 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
               <div className="clay-panel p-4 sm:p-5 bg-gray-50 rounded-2xl sm:rounded-3xl space-y-4 border border-border/40">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-xl">🚚</span>
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                      </svg>
+                    </div>
                     <h4 className="text-[11px] font-bold uppercase tracking-wider text-foreground">Delivery Check</h4>
                   </div>
                   <span className="text-[10px] text-primary/70 font-bold bg-primary/10 px-2 py-1 rounded-md">Live</span>
@@ -381,7 +383,7 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                     </p>
                     {pinResult.serviceable && (
                       <p className="text-[11px] mt-1.5 opacity-80 uppercase tracking-wider font-semibold">
-                        Via {pinResult.courierPartner} • Surface Delivery
+                        Express Insured Delivery • Standard Shipping
                       </p>
                     )}
                   </div>
@@ -427,9 +429,8 @@ export default function ProductDetailPage({ params }: ProductDetailPageProps) {
                       onClick={() => updateQuantity(product.id, cartItem.quantity + 1)}
                       disabled={isMaxInCart}
                       title={isMaxInCart ? `Max stock (${currentStock}) reached` : "Add one more"}
-                      className={`w-7 h-7 flex items-center justify-center font-bold text-[#7c2d12] hover:bg-orange-50 rounded-full text-sm active:scale-[0.96] ${
-                        isMaxInCart ? "opacity-30 cursor-not-allowed" : ""
-                      }`}
+                      className={`w-7 h-7 flex items-center justify-center font-bold text-[#7c2d12] hover:bg-orange-50 rounded-full text-sm active:scale-[0.96] ${isMaxInCart ? "opacity-30 cursor-not-allowed" : ""
+                        }`}
                     >
                       +
                     </button>

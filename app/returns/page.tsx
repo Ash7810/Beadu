@@ -10,18 +10,29 @@ export default function ReturnsPolicyPage() {
       <main className="flex-1 flex flex-col items-center py-16 px-6">
         <div className="max-w-4xl w-full bg-white p-8 md:p-12 shadow-sm rounded-3xl border border-border/60 ring-1 ring-black/10">
           <div className="text-center mb-10">
-            <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-4">Return & Exchange Policy</h1>
+            <h1 className="font-heading text-4xl md:text-5xl text-foreground mb-4">No Return & No Refund Policy</h1>
             <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl mx-auto">
-              Welcome to Beadu. We want you to fall in love with your handmade jewellery and we mean it. If something isn’t quite right, we’re here to help. This Return & Exchange Policy explains how you can exchange or return a Beadu piece purchased from our online store in India.
+              At Beadu, every piece of jewellery is handcrafted to order by our Jaipur artisans. Because of the bespoke nature and hygiene standards of artisan jewellery, <strong>we operate on a strict No-Cash-Refund and Final Sale policy</strong>. Please review the terms below before purchasing.
+            </p>
+          </div>
+
+          {/* Policy Summary Callout */}
+          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs leading-relaxed space-y-1.5 mb-8">
+            <p className="font-bold flex items-center gap-1.5 text-sm text-amber-950">
+              <span>⚠️</span>
+              <span>All Sales Final • No Cash or Bank Refunds</span>
+            </p>
+            <p>
+              Due to the delicate, handcrafted nature of our gemstone and glass bead pieces, we do not accept returns or process cash refunds. We offer <strong>free identical replacements</strong> exclusively in the verified event of damage occurring during courier transit (unboxing video required within 24 hours of delivery).
             </p>
           </div>
 
           <div className="space-y-8 text-sm text-foreground/80 leading-relaxed">
             
             <section>
-              <h2 className="font-heading text-2xl text-primary mb-3">1. Our Promise to You</h2>
+              <h2 className="font-heading text-2xl text-primary mb-3">1. Handcrafted Artisan Commitment</h2>
               <p>
-                At Beadu, every item is handcrafted with care, each bead, clasp and finish made with love. We strive for perfection, but if your piece arrives damaged or is not what you ordered, we’ll make it right.
+                Every strand, custom bracelet, and gemstone piece is carefully measured, strung, and inspected in our studio. We maintain fair pricing and artisan compensation by operating on a final-sale model.
               </p>
             </section>
 
@@ -72,11 +83,11 @@ export default function ReturnsPolicyPage() {
             </section>
 
             <section>
-              <h2 className="font-heading text-2xl text-primary mb-3">4. Store Credit & Refunds</h2>
+              <h2 className="font-heading text-2xl text-primary mb-3">4. Strict No Cash Refunds Policy</h2>
               <ul className="list-disc pl-5 space-y-1">
-                <li>If a return is approved and a replacement isn’t available, we’ll issue a store credit (a unique coupon code) equivalent to the product value. This credit can be used for future purchases at Beadu.</li>
-                <li>Cash refunds or bank transfers are not offered—this helps us maintain fair pricing for our handmade jewellery.</li>
-                <li>Store credit will be valid for 12 months from issue and cannot be exchanged for cash.</li>
+                <li><strong>No Cash Refunds or Bank Transfers:</strong> Under no circumstances do we offer cash refunds or bank reversals. This policy enables us to handcraft custom artisan jewellery at accessible price points.</li>
+                <li><strong>Replacement First:</strong> In the rare event of verified transit damage with an unboxing video, we dispatch an identical replacement strand at zero extra cost to you.</li>
+                <li><strong>Store Credit Alternative:</strong> Only if an identical replacement bead or design is completely out of stock will store credit (valid 12 months) be provided.</li>
               </ul>
             </section>
 
